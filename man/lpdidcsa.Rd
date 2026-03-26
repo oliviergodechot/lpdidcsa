@@ -122,11 +122,7 @@ hypothesis.}
 \examples{
 \dontrun{
 library(data.table); library(fixest); library(ggplot2); library(did)
-data(mpdta, package = "did")
-mpdta_r <- setDT(copy(mpdta))
-
-# Redesign of the treatment variable for an absorbing variable
-mpdta_r[,treat:=fifelse(first.treat==0,0,(year - first.treat>=0)*1)]
+data(mpdta_r, package = "lpdidcsa")
 
 # Prepare data, then estimate with reweighted LP-DiD
 df  <- lpdidcsa_data(mpdta_r, unit = "countyreal", time = "year",

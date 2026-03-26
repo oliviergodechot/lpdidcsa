@@ -63,13 +63,8 @@
 #' @examples
 #' \dontrun{
 #' library(data.table)
-#' data(mpdta, package = "did")
+#' data(mpdta_r, package = "lpdidcsa")
 #' 
-#' mpdta_r <- setDT(copy(mpdta))
-#' 
-#' # Redesign of the treatment variable for an absorbing variable
-#' mpdta_r[,treat:=fifelse(first.treat==0,0,(year - first.treat>=0)*1)]
-#'
 #' p_variables <- list(
 #'   t0  = c("lpop", "lpop2"),
 #'   tm1 = c("lpop", "lpop2"),

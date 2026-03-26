@@ -1,23 +1,11 @@
 Package: lpdidcsa
 Title: Local Projections DiD and Callaway-Sant'Anna Event Studies
 Version: 0.1.0
-Authors@R: 
-    person("Olivier", "Godechot", email = "olivier.godechot@sciencespo.fr",
-           role = c("aut", "cre"))
-Description: Implements the Local Projections Difference-in-Differences
-    (LP-DiD) estimator of Dube, Girardi, Jorda and Taylor (2025) and a
-    local-projection version of the Callaway and Sant'Anna (2021)
-    heterogeneity-robust event study estimator. Provides data preparation
-    (lpdidcsa_data) and estimation (lpdidcsa) functions, with support for
-    absorbing and non-absorbing treatments, inverse probability weighting,
-    and reweighting for equally-weighted average treatment effects.
+Authors@R: c(person("Olivier", "Godechot", email = "olivier.godechot@sciencespo.fr", role = c("aut", "cre")), person("Ulysse", "Lojkine", role = "aut"))
+Description: The package implements the LP-DiD estimator of Dube, Girardi, Jordà & Taylor (2025) and a local-projection version of the Callaway & Sant'Anna (2021) estimator, with support for absorbing and non-absorbing treatments. It enables to run LP-DiD and reweighted LP-DiD with or without control variables, adjusted LP-DiD with control variables, inverse probability weighting LP-DiD, LP-CSA with or without control variables and inverse probability weighting LP-CSA.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports: data.table, fixest, ggplot2, marginaleffects
 Suggests: did
-NeedsCompilation: no
-Packaged: 2026-03-26 08:55:46 UTC; olivier
-Author: Olivier Godechot [aut, cre]
-Maintainer: Olivier Godechot <olivier.godechot@sciencespo.fr>

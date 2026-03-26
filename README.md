@@ -2,12 +2,19 @@
 
 **Local Projections DiD and Callaway & Sant'Anna Event Studies in R.**
 
+## License and Credits
+
+- The code in this package is licensed under the [MIT License](LICENSE).
+- The `mpdta` dataset is sourced from the [`did` package](https://cloud.r-project.org/web/packages/did/index.html) and is licensed under [GPL-2](LICENSE.did).
+
+## Description
+
 `lpdidcsa` provides two functions that together cover the full workflow:
 
 1.  **`lpdidcsa_data()`** — reshapes a panel into the format required for estimation
 2.  **`lpdidcsa()`** — estimates event study coefficients and produces a plot
 
-The package implements the LP-DiD estimator of Dube, Girardi, Jordà & Taylor (2025) and a local-projection version of the Callaway & Sant'Anna (2021) estimator, with support for absorbing and non-absorbing treatments, inverse probability weighting, and reweighting for equally-weighted ATTs.
+The package implements the LP-DiD estimator of Dube, Girardi, Jordà & Taylor (2025) and a local-projection version of the Callaway & Sant'Anna (2021) estimator, with support for absorbing and non-absorbing treatments. It enables to run LP-DiD and reweighted LP-DiD with or without control variables, adjusted LP-DiD with control variables, inverse probability weighting LP-DiD, LP-CSA with or without control variables and inverse probability weighting LP-CSA.
 
 ------------------------------------------------------------------------
 
@@ -77,18 +84,12 @@ p_variables <- list(
 | `<dep>_tm2`, `<dep>_t0`, … | Outcome at each horizon (wide format) |
 | `horizon` | Horizon integer *h = t′ − t* (long format) |
 
-Horizon **−1** is always omitted — it is the reference period by convention.
 
 ### Example
 
 ``` r
 library(data.table)
-data(mpdta, package = "did")
-mpdta_r <- setDT(copy(mpdta))
-
-# Redesign of the treatment variable to generate an absorbing treatment dummy variable
-mpdta_r[,treat:=fifelse(first.treat==0,0,(year - first.treat>=0)*1)]
-mpdta_r[,lpop2:=lpop^2]
+data(mpdta_r, package = "lpdidcsa")
 
 p_variables <- list(
   tm2 = c("lpop", "lpop2"),
@@ -179,9 +180,7 @@ A named list with four elements:
 library(data.table)
 library(fixest)
 library(ggplot2)
-data(mpdta, package = "did")
-mpdta_r[,treat:=fifelse(first.treat==0,0,(year - first.treat>=0)*1)]
-mpdta_r[,lpop2:=lpop^2]
+data(mpdta_r, package = "lpdidcsa")
 
 # Step 1: prepare data
 df <- lpdidcsa_data(

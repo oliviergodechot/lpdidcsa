@@ -83,12 +83,7 @@ and Callaway & Sant'Anna (2021) style heterogeneity-robust event studies.
 \examples{
 \dontrun{
 library(data.table)
-data(mpdta, package = "did")
-
-mpdta_r <- setDT(copy(mpdta))
-
-# Redesign of the treatment variable for an absorbing variable
-mpdta_r[,treat:=fifelse(first.treat==0,0,(year - first.treat>=0)*1)]
+data(mpdta_r, package = "lpdidcsa")
 
 p_variables <- list(
   t0  = c("lpop", "lpop2"),
