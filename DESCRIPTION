@@ -10,7 +10,7 @@ RoxygenNote: 7.3.3
 Imports: data.table, fixest, ggplot2, marginaleffects
 Suggests: did
 NeedsCompilation: no
-Packaged: 2026-03-26 12:57:41 UTC; 41069
+Packaged: 2026-03-26 13:01:21 UTC; 41069
 Author: Olivier Godechot [aut, cre],
   Ulysse Lojkine [aut]
 Maintainer: Olivier Godechot <olivier.godechot@sciencespo.fr>
