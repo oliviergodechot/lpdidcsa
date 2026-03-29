@@ -230,7 +230,7 @@ lpdidcsa_data <- function(data,
   setorderv(df, cols=c(col_unit,col_time))
   
   
-  df[, dtime:=year-shift(eval(as.name(col_time)))-1,by=col_unit]
+  df[, dtime:=eval(as.name(col_time))-shift(eval(as.name(col_time)))-1,by=col_unit]
   sdtime <- df[,sum(abs(dtime),na.rm=T)]
   
   if (sdtime>0){
