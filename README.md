@@ -52,7 +52,7 @@ Prepares the panel by computing treatment timing variables and creating leads/la
 ### Arguments
 
 | Argument       | Type                        | Default   | Description                            |
-|------------------|------------------|------------------|------------------|
+|----------------|-----------------------------|-----------|----------------------------------------|
 | `data`         | `data.frame` / `data.table` | —         | Input panel                            |
 | `unit`         | `character`                 | —         | Unit identifier column                 |
 | `time`         | `character`                 | `"year"`  | Time period column (integer-valued)    |
@@ -80,7 +80,7 @@ p_variables <- list(
 ### Output columns added
 
 | Column                     | Description                                                               |
-|------------------------------------|------------------------------------|
+|----------------------------|---------------------------------------------------------------------------|
 | `first.treat`              | First treatment period per unit (`NA` for never-treated). Absorbing only. |
 | `last.treat`               | Most recent treatment period as of *t*                                    |
 | `next.treat`               | Next upcoming treatment period                                            |
@@ -136,7 +136,7 @@ Estimates event study coefficients horizon by horizon (or in a single stacked re
 ### Arguments
 
 | Argument         | Type                        | Default      | Description                                                         |
-|------------------|------------------|------------------|------------------|
+|------------------|-----------------------------|--------------|---------------------------------------------------------------------|
 | `data`           | `data.frame` / `data.table` | —            | Output of `lpdidcsa_data()`                                         |
 | `unit`           | `character`                 | —            | Unit identifier column                                              |
 | `time`           | `character`                 | `"year"`     | Time period column                                                  |
@@ -164,31 +164,31 @@ Estimates event study coefficients horizon by horizon (or in a single stacked re
 #### Without control variables
 
 | `meth`        | Description                                         | ATT type          |
-|------------------------|------------------------|------------------------|
+|---------------|-----------------------------------------------------|-------------------|
 | `"lpdid"`     | LP-DiD                                              | Variance-weighted |
 | `"lpdid_rw"`  | Reweighted LP-DiD                                   | Equally-weighted  |
 | `"lpdid_adj"` | LP-DiD with adjusted regression (`avg_comparisons`) | Equally-weighted  |
-| `"lpdid_ipw"` | LP-DiD with inverse probability weighting           | Equally-weighted  |
-| `"lpcsa_ipw"` | LP-CSA with inverse probability weighting           | Equally-weighted  |
 | `"lpcsa"`     | LP-CSA                                              | Equally-weighted  |
+| `"lpdid_ipw"` | runs `"lpdid_rw"`                                   | Equally-weighted  |
+| `"lpcsa_ipw"` | runs `"lpcsa"`                                      | Equally-weighted  |
 
 #### With control variables
 
 | `meth`        | Description                                         | ATT type                                                        |
-|------------------------|------------------------|------------------------|
+|---------------|-----------------------------------------------------|-----------------------------------------------------------------|
 | `"lpdid"`     | LP-DiD with control variables                       | Variance-weighted under control variable homogeneity hypothesis |
 | `"lpdid_rw"`  | Reweighted LP-DiD with control variables            | Equally-weighted under control variable homogeneity hypothesis  |
 | `"lpdid_adj"` | LP-DiD with adjusted regression (`avg_comparisons`) | Equally-weighted                                                |
 | `"lpdid_ipw"` | LP-DiD with inverse probability weighting           | Equally-weighted                                                |
-| `"lpcsa_ipw"` | LP-CSA with inverse probability weighting           | Equally-weighted                                                |
 | `"lpcsa"`     | LP-CSA with control variables                       | Equally-weighted under control variable homogeneity hypothesis  |
+| `"lpcsa_ipw"` | LP-CSA with inverse probability weighting           | Equally-weighted                                                |
 
 ### Return value
 
 A named list with four elements:
 
 | Element   | Description                                                                                                   |
-|------------------------------------|------------------------------------|
+|-----------|---------------------------------------------------------------------------------------------------------------|
 | `est`     | Main results: `data.table` with columns `h`, `variable`, `estimate`, `se`, `T`, `pvalue`, `nb_obs`, `formula` |
 | `est_det` | Cohort-level estimates (CSA and adjusted methods only)                                                        |
 | `ps`      | Propensity score estimates (IPW methods only)                                                                 |
