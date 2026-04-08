@@ -1,0 +1,236 @@
+---
+title: "Comparing `lpdidcsa` and `did` Packages for Difference-in-Differences Estimation"
+author: "Olivier Godechot"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+vignette: "%\\VignetteIndexEntry{Comparing lpdidcsa and did Packages}%\\VignetteEngine{knitr::rmarkdown}%\\VignetteEncoding{UTF-8}"
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(error = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Introduction
+
+This vignette shows how to use the `lpdidcsa` package for difference-in-differences (DiD) estimation and compares its results with those from the `did` package by Callaway and Sant'Anna. We focus on two estimation methods: inverse probability weighting (IPW) and adjusted regression. Additionally, we explore how `lpdidcsa` handles missing observations, showcasing its partial rebalancing approach.
+
+# Setup
+
+First, load the required packages and set the working directory.
+
+```{r lib}
+library(data.table)
+library(did)
+library(lpdidcsa)
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+```
+
+# Data Preparation
+
+We use the `mpdta_r` dataset from the `lpdidcsa` package for our analysis.
+
+```{r data}
+data(mpdta_r, package = "lpdidcsa")
+
+mpdta_w  <- lpdidcsa_data(mpdta_r, unit = "countyreal", time = "year",
+                     dependent = "lemp", treat = "treat")
+
+```
+
+# Comparison of Estimation Methods
+
+## Inverse Probability Weighting (IPW)
+
+### Using `did` Package
+
+```{r csa-ipw}
+csa_ipw_det <- att_gt(
+  yname = "lemp",
+  tname = "year",
+  idname = "countyreal",
+  gname = "first.treat",
+  base_period = "universal",
+  control_group = c("notyettreated"),
+  est_method = "ipw",
+  bstrap = FALSE,
+  cband = FALSE,
+  xformla = ~lpop,
+  data = mpdta_r
+)
+# summary(csa_ipw_det)
+csa_ipw <- aggte(csa_ipw_det, type = "dynamic")
+# summary(csa_ipw)
+ggdid(csa_ipw)
+```
+
+
+### Using `lpdidcsa` Package
+
+```{r ipw-did}
+lpdidcsa_ipw <- lpdidcsa(
+  data = mpdta_w,
+  meth = "lpdid_ipw",
+  dtreat = "dtreat",
+  time = "year",
+  unit = "countyreal",
+  dependent = "lemp",
+  controls = "lpop*i(year)"
+)
+lpdidcsa_ipw$plot
+```
+
+### Comparison of Results
+
+```{r ipw-comparison}
+cbind(
+  csa_ipw$att.egt[csa_ipw$att.egt != 0],
+  csa_ipw$se.egt[csa_ipw$att.egt != 0]
+) - lpdidcsa_ipw$est[lpdidcsa_ipw$est$estimate != 0, c("estimate", "se")]
+```
+
+## Adjusted Regression
+
+### Using `did` Package
+
+```{r adj-did}
+csa_adj_det <- att_gt(
+  yname = "lemp",
+  tname = "year",
+  idname = "countyreal",
+  gname = "first.treat",
+  base_period = "universal",
+  control_group = c("notyettreated"),
+  est_method = "reg",
+  bstrap = FALSE,
+  cband = FALSE,
+  xformla = ~lpop,
+  data = mpdta
+)
+# summary(csa_adj_det)
+csa_adj <- aggte(csa_adj_det, type = "dynamic")
+# summary(csa_adj)
+ggdid(csa_adj)
+```
+
+### Using `lpdidcsa` Package
+
+```{r adj-lpdidcsa}
+lpdidcsa_adj <- lpdidcsa(
+  data = mpdta_w,
+  meth = "lpdid_adj",
+  dtreat = "dtreat",
+  time = "year",
+  unit = "countyreal",
+  dependent = "lemp",
+  controls = "lpop*i(year)",
+  type_horizon = "wide"
+)
+lpdidcsa_adj$plot
+```
+
+### Comparison of Results
+
+```{r adj-comparison}
+cbind(
+  csa_adj$att.egt[csa_adj$att.egt != 0],
+  csa_adj$se.egt[csa_adj$att.egt != 0]
+) - lpdidcsa_adj$est[lpdidcsa_adj$est$estimate != 0, c("estimate", "se")]
+```
+
+# Handling Missing Observations
+
+## Creating a Dataset with Missing Observations
+
+```{r missing-data}
+set.seed(444)
+mpdta_r[, noise := runif(nrow(mpdta_r))]
+mpdta_r[, drop := 1 - (noise > 0.1)]
+mpdta_na <- mpdta_r[drop == 0, ]
+# nrow(mpdta_na)
+mpdta_na[, rebal := (sum(!is.na(year)) == 5) * 1, by = countyreal]
+# mpdta_na[,.N, by = rebal]
+```
+
+## Estimating with Unbalanced Data
+
+### Using `did` Package
+
+```{r unbalanced-did}
+csa_unbal_det <- att_gt(
+  yname = "lemp",
+  tname = "year",
+  idname = "countyreal",
+  gname = "first.treat",
+  base_period = "universal",
+  allow_unbalanced_panel = TRUE,
+  control_group = c("notyettreated"),
+  bstrap = FALSE,
+  cband = FALSE,
+  data = mpdta_na
+)
+# summary(csa_unbal_det)
+csa_unbal <- aggte(csa_unbal_det, type = "dynamic")
+# summary(csa_unbal)
+ggdid(csa_unbal)
+```
+
+### Using `lpdidcsa` Package with Partial Rebalancing
+
+```{r partial-rebalancing}
+mpdta_na_w <- lpdidcsa_data(
+  data = mpdta_na,
+  treat = "treat",
+  dependent = "lemp",
+  unit = "countyreal",
+  type_horizon = "wide"
+)
+didpartbal <- lpdidcsa(
+  data = mpdta_na_w,
+  meth = "lpdid_rw",
+  dtreat = "dtreat",
+  time = "year",
+  unit = "countyreal",
+  dependent = "lemp",
+  type_horizon = "wide"
+)
+didpartbal$plot
+```
+
+## Comparison of Results with Missing Observations
+
+```{r missing-comparison}
+# Difference between CSA's unbalanced estimate and lpdidcsa partially rebalanced estimate
+cbind(
+  csa_unbal$att.egt[csa_unbal$att.egt != 0],
+  csa_unbal$se.egt[csa_unbal$att.egt != 0]
+) - didpartbal$est[didpartbal$est$estimate != 0, c("estimate", "se")]
+
+# Difference between CSA's rebalanced estimate and lpdidcsa partially rebalanced estimate
+csa_rebal_det <- att_gt(
+  yname = "lemp",
+  tname = "year",
+  idname = "countyreal",
+  gname = "first.treat",
+  base_period = "universal",
+  allow_unbalanced_panel = FALSE,
+  control_group = c("notyettreated"),
+  bstrap = FALSE,
+  cband = FALSE,
+  data = mpdta_na
+)
+csa_rebal <- aggte(csa_rebal_det, type = "dynamic")
+cbind(
+  csa_rebal$att.egt[csa_rebal$att.egt != 0],
+  csa_rebal$se.egt[csa_rebal$att.egt != 0]
+) - didpartbal$est[didpartbal$est$estimate != 0, c("estimate", "se")]
+```
+
+# Conclusion
+
+This vignette demonstrates the use of the `lpdidcsa` package for DiD estimation and compares its results with the `did` package. The `lpdidcsa` package offers a robust approach to handling missing observations through partial rebalancing, which can yield estimates closer to the "true" values without significant loss of power.
+
+For further details, refer to the package documentation and the original papers by Callaway and Sant'Anna, and the methodology behind `lpdidcsa`.
+
+\`\`\`

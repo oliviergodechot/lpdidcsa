@@ -13,9 +13,13 @@ lpdidcsa(
   nb_pre = NULL,
   nb_post = NULL,
   controls = NULL,
+  controls_h = NULL,
   FE = NULL,
-  cluster = NULL,
+  FE_h = NULL,
+  clusters = NULL,
+  clusters_h = NULL,
   weight = NULL,
+  weight_h = NULL,
   meth = "lpdid_rw",
   absorbing = TRUE,
   nonabs_reentry = NULL,
@@ -48,14 +52,31 @@ horizons. If \code{NULL}, all available post-periods are used.}
 \code{NULL}. Accepts \code{fixest}-style formula strings (e.g.
 \code{"i(x)"}, \code{"s(x)"}).}
 
+\item{controls_h}{Character vector of control horizon-specific
+variable column names, needed or \code{NULL}. Does not accept \code{fixest}-style
+formula strings (e.g. \code{"i(x)"}, \code{"s(x)"}). Enter the initial variable
+name. The function adds the suffix (e.g. '_tm5',...,'_t5') if \code{type_horizon = "wide"}
+and the suffix '_th' if \code{type_horizon = "long"}.}
+
 \item{FE}{Character vector of additional fixed-effect column names, or
 \code{NULL}.}
 
-\item{cluster}{Character. Column name used for clustering standard errors.
+\item{FE_h}{Character vector of additional horizon-specific fixed-effect column names, or
+\code{NULL}.}
+
+\item{clusters}{Character. Column names used for clustering standard errors.
 Defaults to \code{unit}.}
+
+\item{clusters_h}{Character vector of control horizon-specific variable column names, needed or
+\code{NULL}. Enter the initial variable names. The function
+adds the suffix (e.g. '_tm5',...,'_t5') if \code{type_horizon = "wide"} and the
+suffix '_th' if \code{type_horizon = "long"}.}
 
 \item{weight}{Character. Column name for survey/sampling weights, or
 \code{NULL}.}
+
+\item{weight_h}{Character. Horizon-specific column name for survey/sampling
+weights, or \code{NULL}.}
 
 \item{meth}{Character. Estimator to use. One of \code{"lpdid"},
 \code{"lpdid_rw"}, \code{"lpdid_adj"}, \code{"lpdid_ipw"},

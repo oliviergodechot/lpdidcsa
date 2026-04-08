@@ -9,3 +9,9 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports: data.table, fixest, ggplot2, marginaleffects
 Suggests: did
+NeedsCompilation: no
+Packaged: 2026-04-08 05:43:44 UTC; olivier
+Author: Olivier Godechot [aut, cre],
+  Ulysse Lojkine [aut]
+Maintainer: Olivier Godechot <olivier.godechot@sciencespo.fr>
+Depends: R (>= 3.5.0)

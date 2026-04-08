@@ -229,6 +229,7 @@ lpdidcsa_data <- function(data,
   
   setorderv(df, cols=c(col_unit,col_time))
   
+  df[,rownumber:=c(1L:nrow(df))]
   
   df[, dtime:=eval(as.name(col_time))-shift(eval(as.name(col_time)))-1,by=col_unit]
   sdtime <- df[,sum(abs(dtime),na.rm=T)]
@@ -301,6 +302,10 @@ lpdidcsa_data <- function(data,
       
     }
     
+    df <- df[!is.na(rownumber),]
+    df <- df[order(rownumber),]
+    df[,rownumber:=NULL]
+    
     return(df)
     
     # ── 4. Long horizon format ─────────────────────────────────────────────────
@@ -367,6 +372,11 @@ lpdidcsa_data <- function(data,
     df_l[, dtreat  := get(col_trt) - get(col_trt_tm1)]
     
     df_l <- df_l[horizon %in% c(-1, horizons) & !is.na(dtreat)]
+    
+    df_l <- df_l[!is.na(rownumber),]
+    df_l <- df_l[order(horizon,rownumber),]
+    df_l[,rownumber:=NULL]
+    
     
     return(df_l)
   }
