@@ -7,20 +7,20 @@
 #'
 #' \describe{
 #'   \item{\code{"lpdid"}}{LP-DiD with control variables. Yields a
-#'     variance-weighted ATT under the control-variable homogeneity
-#'     hypothesis.}
+#'     variance-weighted ATT under the hypothesis that treatment effects do not
+#'     vary with the value of covariates.}
 #'   \item{\code{"lpdid_rw"}}{Reweighted LP-DiD with control variables.
-#'     Yields an equally-weighted ATT under the control-variable homogeneity
-#'     hypothesis.}
+#'     Yields an equally-weighted ATT under the hypothesis that treatment effects do not
+#'     vary with the value of covariates.}
 #'   \item{\code{"lpdid_adj"}}{LP-DiD with adjusted regression via
 #'     \code{avg_comparisons}. Yields an equally-weighted ATT (slower).}
 #'   \item{\code{"lpdid_ipw"}}{LP-DiD with inverse probability weighting.
 #'     Yields an equally-weighted ATT.}
+#'   \item{\code{"lpcsa"}}{LP-CSA with control variables. Yields an
+#'     equally-weighted ATT under the hypothesis that treatment effects do not
+#'     vary with the value of covariates.}
 #'   \item{\code{"lpcsa_ipw"}}{LP-CSA with inverse probability weighting
 #'     (local-projection version of Callaway & Sant'Anna).}
-#'   \item{\code{"lpcsa"}}{LP-CSA with control variables. Yields an
-#'     equally-weighted ATT under the control-variable homogeneity
-#'     hypothesis.}
 #' }
 #'
 #' @param data A \code{data.frame} or \code{data.table}, typically the output
@@ -31,9 +31,9 @@
 #' @param dependent Character. Column name for the dependent variable.
 #' @param dtreat Character. Column name for the treatment change indicator
 #'   (0/1; default: \code{"dtreat"}).
-#' @param nb_pre Integer >= 0 or \code{NULL}. Number of pre-treatment horizons.
+#' @param n_pre Integer >= 0 or \code{NULL}. Number of pre-treatment horizons.
 #'   If \code{NULL}, all available pre-periods are used.
-#' @param nb_post Integer >= 0 or \code{NULL}. Number of post-treatment
+#' @param n_post Integer >= 0 or \code{NULL}. Number of post-treatment
 #'   horizons. If \code{NULL}, all available post-periods are used.
 #' @param controls Character vector of control variable column names, or
 #'   \code{NULL}. Accepts \code{fixest}-style formula strings (e.g.
@@ -63,10 +63,10 @@
 #' @param absorbing Logical. If \code{TRUE} (default), treatment is assumed
 #'   absorbing and not-yet-treated units serve as controls. If \code{FALSE},
 #'   a non-absorbing design is used.
-#' @param nonabs_reentry Integer or \code{NULL}. Only used when
-#'   \code{absorbing = FALSE}. Minimum number of periods since last treatment
-#'   for a unit to re-enter the DiD comparison set. \code{NULL} imposes no
-#'   restriction on prior treatment.
+#' @param reentry Integer or \code{NULL}. If \code{absorbing = FALSE }, minimum 
+#'   number of periods  since last treatment for a unit to re-enter the DiD comparison
+#'   set as a control unit or for a new treatment. 
+#'   \code{NULL} forbids reentry of already treated units (default: \code{NULL}).
 #' @param type_horizon Character. Whether the input \code{data} is in
 #'   \code{"wide"} (default) or \code{"long"} format, as produced by
 #'   \code{lpdidcsa_data()}.
@@ -80,7 +80,7 @@
 #'   \describe{
 #'     \item{\code{est}}{Main estimation results as a \code{data.table} with
 #'       columns \code{h}, \code{variable}, \code{estimate}, \code{se},
-#'       \code{T}, \code{pvalue}, \code{nb_obs}, \code{formula}.}
+#'       \code{T}, \code{pvalue}, \code{n_obs}, \code{formula}.}
 #'     \item{\code{est_det}}{Cohort-level (disaggregated) estimates as a
 #'       \code{data.table}. Non-\code{NULL} for CSA and adjusted methods
 #'       only.}
@@ -100,17 +100,60 @@
 #'   \emph{Journal of Econometrics}, 225(2), 200-230.
 #'
 #' @examples
-#' \dontrun{
-#' library(data.table); library(fixest); library(ggplot2); library(did)
+#' \donttest{
 #' data(mpdta_r, package = "lpdidcsa")
 #'
-#' # Prepare data, then estimate with reweighted LP-DiD
-#' df  <- lpdidcsa_data(mpdta_r, unit = "countyreal", time = "year",
-#'                      dependent = "lemp", treat = "treat")
+#' # Data preparation (with wide format horizons)
+#' suppressWarnings({df  <- lpdidcsa_data(mpdta_r, unit = "countyreal", time = "year",
+#'                      dependent = "lemp", treat = "treat")})
+#' 
+#'                      
+#' # 1. Estimation with lpdid_rw and no covariates
 #' res <- lpdidcsa(df, unit = "countyreal", time = "year",
 #'                 dependent = "lemp", meth = "lpdid_rw")
-#' res$plot
-#' res$est
+#'                 
+#' # Horizon estimates
+#' print(res$plot)
+#' print(res$est)
+#' 
+#' 
+#' # 2. Estimation with lpcsa and no covariates
+#' res <- lpdidcsa(df, unit = "countyreal", time = "year",
+#'                 dependent = "lemp", meth = "lpcsa")
+#'                 
+#' # Horizon estimates
+#' print(res$plot)
+#' print(res$est)
+#' 
+#' # Cohort * horizon estimates
+#' print(res$est_det)
+#' 
+#' 
+#' # 3. Estimation with lpdid_ipw and covariates                    
+#' res <- lpdidcsa(df, unit = "countyreal", time = "year",
+#'                 dependent = "lemp", meth = "lpdid_ipw",controls="lpop")
+#' 
+#' # Horizon estimates
+#' print(res$plot)
+#' print(res$est)
+#' 
+#' # First stage propensity score estimates
+#' print(res$ps)
+#' 
+#' # 4. Estimation with lpcsa_ipw and covariates
+#' res <- lpdidcsa(df, unit = "countyreal", time = "year",
+#'                 dependent = "lemp", meth = "lpcsa_ipw",controls="lpop")
+#' 
+#' # Horizon estimates
+#' print(res$plot)
+#' print(res$est)
+#' 
+#' # Cohort * horizon estimates
+#' print(res$est_det)
+#' 
+#' # First stage propensity score estimates
+#' print(res$ps)
+#' 
 #' }
 #'
 #' @import data.table fixest ggplot2
@@ -121,8 +164,8 @@ lpdidcsa <- function(data,
                      time           = "year",
                      unit           = NULL,
                      dependent      = NULL,
-                     nb_pre         = NULL,
-                     nb_post        = NULL,
+                     n_pre         = NULL,
+                     n_post        = NULL,
                      controls       = NULL,
                      controls_h     = NULL,
                      FE             = NULL,
@@ -133,7 +176,7 @@ lpdidcsa <- function(data,
                      weight_h       = NULL,                     
                      meth           = "lpdid_rw",
                      absorbing      = TRUE,
-                     nonabs_reentry = NULL,
+                     reentry        = NULL,
                      type_horizon   = "wide",
                      horizon        = "horizon",
                      one_reg        = FALSE)
@@ -202,32 +245,32 @@ lpdidcsa <- function(data,
                                    substr(col_dep_all,
                                           nchar(dependent) + 3,
                                           nchar(col_dep_all))))
-    max_nb_pre  <- -min(time_dep)
-    max_nb_post <- max(time_dep)
+    max_n_pre  <- -min(time_dep)
+    max_n_post <- max(time_dep)
     
   } else if (type_horizon == "long") {
-    max_nb_pre  <- -df[, min(horizon, na.rm = TRUE)]
-    max_nb_post <-  df[, max(horizon, na.rm = TRUE)]
+    max_n_pre  <- -df[, min(horizon, na.rm = TRUE)]
+    max_n_post <-  df[, max(horizon, na.rm = TRUE)]
   }
   
-  # Cap nb_pre / nb_post at what the data supports
-  if (is.null(nb_post) | !is.numeric(nb_post)) {
-    nb_post <- max_nb_post
-  } else if (nb_post == floor(nb_post)) {
-    nb_post <- pmin(nb_post, max_nb_post)
+  # Cap n_pre / n_post at what the data supports
+  if (is.null(n_post) | !is.numeric(n_post)) {
+    n_post <- max_n_post
+  } else if (n_post == floor(n_post)) {
+    n_post <- pmin(n_post, max_n_post)
   } else {
-    nb_post <- max_nb_post
+    n_post <- max_n_post
   }
   
-  if (is.null(nb_pre) | !is.numeric(nb_pre)) {
-    nb_pre <- max_nb_pre
-  } else if (nb_pre == floor(nb_pre)) {
-    nb_pre <- pmin(max_nb_pre, abs(nb_pre))
+  if (is.null(n_pre) | !is.numeric(n_pre)) {
+    n_pre <- max_n_pre
+  } else if (n_pre == floor(n_pre)) {
+    n_pre <- pmin(max_n_pre, abs(n_pre))
   } else {
-    nb_pre <- max_nb_pre
+    n_pre <- max_n_pre
   }
   
-  horizons <- setdiff(-abs(nb_pre):nb_post, -1L)
+  horizons <- setdiff(-abs(n_pre):n_post, -1L)
   
   # ── Inner helpers ──────────────────────────────────────────────────────────
   
@@ -267,14 +310,14 @@ lpdidcsa <- function(data,
                  is.na(df$first.treat) |
                  (!is.na(df$first.treat) & h <  0 & df[[col_time]] <  df$first.treat) |
                  (!is.na(df$first.treat) & h >= 0 & df[[col_time]] + h < df$first.treat))
-    } else if (is.null(nonabs_reentry)) {
+    } else if (is.null(reentry)) {
       keep <- (is.na(df$last.treat) &
                  (is.na(df$next.treat) |
                     (!is.na(df$next.treat) &
                        df[[col_time]] + h * (h >= 0) < df$next.treat)))
     } else {
       keep <- ((is.na(df$last.treat) |
-                  df[[col_time]] - df$last.treat > nonabs_reentry) &
+                  df[[col_time]] - df$last.treat > reentry) &
                  (is.na(df$next.treat) |
                     (!is.na(df$next.treat) &
                        df[[col_time]] + h * (h >= 0) < df$next.treat)))
@@ -298,14 +341,14 @@ lpdidcsa <- function(data,
                  is.na(df$first.treat) |
                  (!is.na(df$first.treat) & df[[horizon]] <  0 & df[[col_time]] <  df$first.treat) |
                  (!is.na(df$first.treat) & df[[horizon]] >= 0 & df[[col_time]] + df[[horizon]] < df$first.treat))
-    } else if (is.null(nonabs_reentry)) {
+    } else if (is.null(reentry)) {
       keep <- (is.na(df$last.treat) &
                  (is.na(df$next.treat) |
                     (!is.na(df$next.treat) &
                        df[[col_time]] + df[[horizon]] * (df[[horizon]] >= 0) < df$next.treat)))
     } else {
       keep <- ((is.na(df$last.treat) |
-                  df[[col_time]] - df$last.treat > nonabs_reentry) &
+                  df[[col_time]] - df$last.treat > reentry) &
                  (is.na(df$next.treat) |
                     (!is.na(df$next.treat) &
                        df[[col_time]] + df[[horizon]] * (df[[horizon]] >= 0) < df$next.treat)))
@@ -339,11 +382,11 @@ lpdidcsa <- function(data,
       h        = h,
       variable = row.names(model$coeftable),
       model$coeftable,
-      nb_obs   = model$nobs,
+      n_obs   = model$nobs,
       formula  = formula_str
     )
     setnames(out, c("h", "variable", "estimate", "se", "T", "pvalue",
-                    "nb_obs", "formula"))
+                    "n_obs", "formula"))
     out
   }
   
@@ -352,7 +395,7 @@ lpdidcsa <- function(data,
     out <- data.table(
       variable = row.names(model$coeftable),
       model$coeftable,
-      nb_obs   = model$nobs,
+      n_obs   = model$nobs,
       formula  = formula_str
     )
     h <- as.numeric(ifelse(
@@ -365,7 +408,7 @@ lpdidcsa <- function(data,
     out <- data.frame(h, out)
     setDT(out)
     setnames(out, c("h", "variable", "estimate", "se", "T", "pvalue",
-                    "nb_obs", "formula"))
+                    "n_obs", "formula"))
     out
   }
   
@@ -375,11 +418,11 @@ lpdidcsa <- function(data,
       h        = h,
       variable = row.names(model),
       model,
-      nb_obs   = model_det$nobs,
+      n_obs   = model_det$nobs,
       formula  = formula_str
     )
     setnames(out, c("h", "variable", "estimate", "se", "T", "pvalue",
-                    "nb_obs", "formula"))
+                    "n_obs", "formula"))
     out
   }
   
@@ -388,7 +431,7 @@ lpdidcsa <- function(data,
     out <- data.table(
       variable = row.names(model),
       model,
-      nb_obs   = model_det$nobs,
+      n_obs   = model_det$nobs,
       formula  = formula_str
     )
     h <- as.numeric(ifelse(
@@ -401,7 +444,7 @@ lpdidcsa <- function(data,
     out <- data.frame(h, out)
     setDT(out)
     setnames(out, c("h", "variable", "estimate", "se", "T", "pvalue",
-                    "nb_obs", "formula"))
+                    "n_obs", "formula"))
     out
   }
   
@@ -483,7 +526,7 @@ lpdidcsa <- function(data,
                                          nchar(variable) - 3,
                                          nchar(variable)))]
     n_t <- clean_df[get(col_dtreat) == 1, .N, by = col_time]
-    setnames(n_t, c(col_time, "nb_treat"))
+    setnames(n_t, c(col_time, "n_treat"))
     merge(dt, n_t, by = col_time)
   }
   
@@ -1136,7 +1179,7 @@ lpdidcsa <- function(data,
                       width = 0)) +
     geom_line()  +
     geom_point() +
-    scale_x_continuous(breaks = -abs(nb_pre):nb_post) +
+    scale_x_continuous(breaks = -abs(n_pre):n_post) +
     labs(x = "Horizon", y = "Estimate") +
     theme_minimal() +
     theme(panel.grid.major.x = element_blank())

@@ -16,32 +16,32 @@
 #' @param absorbing Logical. If \code{TRUE} (default), treatment is assumed
 #'   absorbing (once treated, always treated). If \code{FALSE}, treatment can
 #'   switch on and off across periods.
-#' @param nb_pre Integer or \code{NULL}. Number of pre-treatment periods to
+#' @param n_pre Integer or \code{NULL}. Number of pre-treatment periods to
 #'   include. Defaults to all available pre-periods if \code{NULL} or
 #'   non-integer. Capped at the maximum available in the data.
-#' @param nb_post Integer or \code{NULL}. Number of post-treatment periods to
+#' @param n_post Integer or \code{NULL}. Number of post-treatment periods to
 #'   include. Defaults to all available post-periods if \code{NULL} or
 #'   non-integer. Capped at the maximum available in the data.
-#' @param type_horizon Character. Output structure: \code{"wide"} (default)
-#'   creates one column per horizon; \code{"long"} stacks all horizons into a
-#'   single \code{horizon} column.
-#' @param h_variables Character vector of column names to be carried through at
-#'   every horizon (e.g. time-varying controls). Use \code{NULL} (default) if
-#'   not needed.
 #' @param p_variables Named list of character vectors specifying
 #'   horizon-specific control variables. List names follow the convention
 #'   \code{"t0"}, \code{"t1"}, \code{"tm1"}, \code{"tm2"}, etc., where
 #'   \code{"tm"} stands for \emph{t minus}. Use an empty list (default:
 #'   \code{list()}) when no horizon-specific controls are needed.
+#' @param h_variables Character vector of column names to be carried through at
+#'   every horizon (e.g. time-varying controls). Use \code{NULL} (default) if
+#'   not needed.
+#' @param type_horizon Character. Output structure: \code{"wide"} (default)
+#'   creates one column per horizon; \code{"long"} stacks all horizons into a
+#'   single \code{horizon} column.
 #'
 #' @return A \code{data.table} with the original columns plus:
 #'   \describe{
 #'     \item{\code{first.treat}}{First treatment period per unit (\code{NA}
 #'       for never-treated). Only present when \code{absorbing = TRUE}.}
 #'     \item{\code{last.treat}}{Most recent treatment period as of \emph{t}
-#'       (\code{NA} if never treated yet).}
+#'       (\code{NA} if never treated yet). Only present when \code{absorbing = FALSE}.}
 #'     \item{\code{next.treat}}{Next upcoming treatment period (\code{NA} if
-#'       no future treatment).}
+#'       no future treatment). Only present when \code{absorbing = FALSE}.}
 #'     \item{\code{dtreat}}{Change in treatment status:
 #'       \eqn{D_{it} - D_{i,t-1}}.}
 #'     \item{Horizon columns}{For \code{type_horizon = "wide"}: outcome and
@@ -61,18 +61,22 @@
 #'   \emph{Journal of Econometrics}, 225(2), 200-230.
 #'
 #' @examples
-#' \dontrun{
-#' library(data.table)
+#' \donttest{
 #' data(mpdta_r, package = "lpdidcsa")
 #' 
+#' # Initial mpdta_r characteristics
+#' print(colnames(mpdta_r)) 
+#' print(nrow(mpdta_r))
+#' print(ncol(mpdta_r))
+#' print(format(object.size(mpdta_r),units="Mb"))
+#' 
 #' p_variables <- list(
-#'   t0  = c("lpop", "lpop2"),
-#'   tm1 = c("lpop", "lpop2"),
-#'   tm2 = c("lpop", "lpop2")
+#'   tm1 = c("lpop"),
+#'   tm2 = c("lpop")
 #' )
 #'
 #' # Wide format: one column per horizon
-#' df_wide <- lpdidcsa_data(
+#' suppressWarnings({df_wide <- lpdidcsa_data(
 #'   data        = mpdta_r,
 #'   unit        = "countyreal",
 #'   time        = "year",
@@ -80,21 +84,32 @@
 #'   treat       = "treat",
 #'   absorbing   = TRUE,
 #'   p_variables = p_variables
-#' )
+#' )})
+#' 
+#' print(colnames(df_wide))
+#' print(nrow(df_wide))
+#' print(ncol(df_wide))
+#' print(format(object.size(df_wide),units="Mb"))
 #'
 #' # Long format: one row per unit x reference-period x horizon
-#' df_long <- lpdidcsa_data(
+#' suppressWarnings({df_long <- lpdidcsa_data(
 #'   data         = mpdta_r,
 #'   unit         = "countyreal",
 #'   time         = "year",
 #'   dependent    = "lemp",
 #'   treat        = "treat",
 #'   absorbing    = TRUE,
-#'   type_horizon = "long",
-#'   p_variables  = p_variables
-#' )
+#'   p_variables  = p_variables,
+#'   type_horizon = "long"   
+#' )})
+#' 
+#' 
+#' print(colnames(df_long))
+#' print(nrow(df_long))
+#' print(ncol(df_long))
+#' print(format(object.size(df_long),units="Mb"))
+#' 
 #' }
-#'
 #' @import data.table
 #' @export
 lpdidcsa_data <- function(data,
@@ -102,12 +117,12 @@ lpdidcsa_data <- function(data,
                           treat       = "treat",
                           unit        = NULL,
                           dependent   = NULL,
-                          nb_pre      = NULL,
-                          nb_post     = NULL,
+                          n_pre      = NULL,
+                          n_post     = NULL,
                           absorbing   = TRUE,
+                          p_variables = list(),                          
                           h_variables = NULL,
-                          type_horizon= "wide",
-                          p_variables = list())
+                          type_horizon= "wide")
 {
   # ── Input validation ───────────────────────────────────────────────────────
   stopifnot(
@@ -168,22 +183,22 @@ lpdidcsa_data <- function(data,
     
     df[, time2treat  := fifelse(is.na(first.treat), NA, get(col_time) - first.treat)]
     
-    # Last treatment period: most recent t at which treatment switched on
-    df[, last.treat := fifelse(shift(get(col_time), type = "lag") == first.treat,
-                               shift(get(col_time), type = "lag"), NA_real_),
-       by = list(get(col_unit))]
-    df[, last.treat := nafill(last.treat, type = "locf"), by = list(get(col_unit))]
-    df[, time2lasttreat  := fifelse(is.na(last.treat), NA, get(col_time) - last.treat)]
+    # # Last treatment period: most recent t at which treatment switched on
+    # df[, last.treat := fifelse(shift(get(col_time), type = "lag") == first.treat,
+    #                            shift(get(col_time), type = "lag"), NA_real_),
+    #    by = list(get(col_unit))]
+    # df[, last.treat := nafill(last.treat, type = "locf"), by = list(get(col_unit))]
+    # df[, time2lasttreat  := fifelse(is.na(last.treat), NA, get(col_time) - last.treat)]
+    # 
+    # # Next treatment period: next t at which treatment will switch on
+    # df[, next.treat := fifelse(shift(get(col_time), type = "lead") == first.treat,
+    #                            shift(get(col_time), type = "lead"), NA_real_),
+    #    by = list(get(col_unit))]
+    # df[, next.treat := nafill(next.treat, type = "nocb"), by = list(get(col_unit))]
+    # df[, time2nexttreat  := fifelse(is.na(next.treat), NA, get(col_time) - next.treat)]
     
-    # Next treatment period: next t at which treatment will switch on
-    df[, next.treat := fifelse(shift(get(col_time), type = "lead") == first.treat,
-                               shift(get(col_time), type = "lead"), NA_real_),
-       by = list(get(col_unit))]
-    df[, next.treat := nafill(next.treat, type = "nocb"), by = list(get(col_unit))]
-    df[, time2nexttreat  := fifelse(is.na(next.treat), NA, get(col_time) - next.treat)]
-    
-    max_nb_post <- df[, max(time2treat, na.rm = TRUE)]
-    max_nb_pre  <- -df[, min(time2treat, na.rm = TRUE)]
+    max_n_post <- df[, max(time2treat, na.rm = TRUE)]
+    max_n_pre  <- -df[, min(time2treat, na.rm = TRUE)]
     
   } else {
     
@@ -202,25 +217,25 @@ lpdidcsa_data <- function(data,
     df[, time2nexttreat  := fifelse(is.na(next.treat), NA,
                                     get(col_time) - next.treat)]
     
-    max_nb_post <- df[, max(time2lasttreat, na.rm = TRUE)]
-    max_nb_pre  <- df[, max(abs(time2nexttreat), na.rm = TRUE)]
+    max_n_post <- df[, max(time2lasttreat, na.rm = TRUE)]
+    max_n_pre  <- df[, max(abs(time2nexttreat), na.rm = TRUE)]
   }
   
-  # Cap nb_post / nb_pre at what the data actually supports
-  if (is.null(nb_post) | !is.numeric(nb_post)) {
-    nb_post <- max_nb_post
-  } else if (nb_post == floor(nb_post)) {
-    nb_post <- pmin(nb_post, max_nb_post)
+  # Cap n_post / n_pre at what the data actually supports
+  if (is.null(n_post) | !is.numeric(n_post)) {
+    n_post <- max_n_post
+  } else if (n_post == floor(n_post)) {
+    n_post <- pmin(n_post, max_n_post)
   } else {
-    nb_post <- max_nb_post
+    n_post <- max_n_post
   }
   
-  if (is.null(nb_pre) | !is.numeric(nb_pre)) {
-    nb_pre <- max_nb_pre
-  } else if (nb_pre == floor(nb_pre)) {
-    nb_pre <- pmin(max_nb_pre, abs(nb_pre))
+  if (is.null(n_pre) | !is.numeric(n_pre)) {
+    n_pre <- max_n_pre
+  } else if (n_pre == floor(n_pre)) {
+    n_pre <- pmin(max_n_pre, abs(n_pre))
   } else {
-    nb_pre <- max_nb_pre
+    n_pre <- max_n_pre
   }
   
   df[, c("time2treat", "time2nexttreat", "time2lasttreat") := NULL]
@@ -286,7 +301,7 @@ lpdidcsa_data <- function(data,
     
     # 3.3 Leads & lags of the outcome and horizon-specific controls
     # Horizon -1 is the reference period and is excluded by convention
-    horizons <- setdiff(-abs(nb_pre):nb_post, -1L)
+    horizons <- setdiff(-abs(n_pre):n_post, -1L)
     message("Computing horizons: ", paste(horizons, collapse = ", "))
     
     for (h in horizons) {
@@ -312,7 +327,7 @@ lpdidcsa_data <- function(data,
   } else if (type_horizon == "long") {
     
     # 4.1 Merge the t-1 slice for dtreat and reference-period p_variables
-    cols_tm1   <- unique(c(col_unit, col_time, col_dep, col_trt,
+    cols_tm1   <- unique(c(col_dep, col_trt,
                            p_variables_at(-1), h_variables))
     h <- -1
     
@@ -343,7 +358,7 @@ lpdidcsa_data <- function(data,
     # 4.3 Long (cartesian) merge: cross each reference row with all horizon rows
     # Reference rows are anchored at t-1 relative to treatment (or untreated).
     # The right-hand side contains all periods, used as horizon observations.
-    horizons  <- setdiff(-abs(nb_pre):nb_post, -1L)
+    horizons  <- setdiff(-abs(n_pre):n_post, -1L)
     all_p_var <- unique(unlist(p_variables, use.names = FALSE))
     
     cols_ref <- intersect(
@@ -370,6 +385,8 @@ lpdidcsa_data <- function(data,
     # horizon = (horizon period) - (reference period); -1 excluded by convention
     df_l[, horizon := get(col_time_th) - get(col_time)]
     df_l[, dtreat  := get(col_trt) - get(col_trt_tm1)]
+    df_l[, (col_trt_tm1)  := NULL]
+    df_l[, (col_time_th)  := NULL]
     
     df_l <- df_l[horizon %in% c(-1, horizons) & !is.na(dtreat)]
     

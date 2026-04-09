@@ -166,13 +166,8 @@ size, so there is no systematic sorting on firm quality.
 }
 \examples{
 # Quick run with a small panel
-panel <- sim_staggered_panel(n = 2000, Tmax = 10, seed = 1)
+panel <- sim_staggered_panel(n = 2000, seed = 1)
 head(panel)
-
-# Silent generation for use inside a simulation loop
-panels <- lapply(1:100, function(s)
-  sim_staggered_panel(n = 1000, Tmax = 10, seed = s, verbose = FALSE)
-)
 
 # Change the ATT profile and cohort heterogeneity
 panel2 <- sim_staggered_panel(

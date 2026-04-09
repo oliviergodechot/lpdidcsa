@@ -19,13 +19,13 @@ methods <- c("lpdid", "lpdid_rw", "lpdid_adj","lpdid_ipw", "lpcsa", "lpcsa_ipw")
 # methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw")
 
 #Number of individuals
-no_indiv <- 5000L
+n_indiv <- 5000L
 
 #Number of firms
-no_firms <- 100L
+n_firms <- 100L
 
 # Creation of a toy data 
-toydata <- sim_staggered_panel(n=no_indiv,n_firms=no_firms,
+toydata <- sim_staggered_panel(n=n_indiv,n_firms=n_firms,
                                t_min_treat = 2L,
                                t_max_treat = 19L)
 
@@ -59,6 +59,8 @@ time$median
 size_df <- format(object.size(df),units="Mb")
 size_df
 colnames(df)
+nrow(df)
+ncol(df)
 
 ## Long horizon database ---------------------
 time <- bench::mark({df_l  <- lpdidcsa_data(toydata, 
@@ -75,13 +77,15 @@ df_l[,g_i:=NULL]
 time$median
 
 
-size_df <- format(object.size(df_l),units="Mb")
-size_df
+size_df_l <- format(object.size(df_l),units="Mb")
+size_df_l
 colnames(df_l)
+nrow(df_l)
+ncol(df_l)
 
 
 
-nb_it <- 10
+n_it <- 10
 
 method <- "lpdid_ipw"
 
@@ -128,7 +132,7 @@ for (method in methods) {
     method = method,
     par_type_horizon = "wide",
     par_one_reg = FALSE,
-    min_iterations = nb_it
+    min_iterations = n_it
   )
 }
 
@@ -169,7 +173,7 @@ time_csa_ipw <- bench::mark({csa_ipw_det <- att_gt(yname="log_earnings",
                       xformla=~female,
                       data=toydata)
                       csa_ipw <- aggte(csa_ipw_det, type = "dynamic")},
-                    iterations = nb_it,
+                    iterations = n_it,
                     check = FALSE  )    
 
 time_csa_ipw
@@ -188,7 +192,7 @@ time_csa_reg <- bench::mark({csa_reg_det <- att_gt(yname="log_earnings",
                                                    xformla=~female,
                                                    data=toydata)
 csa_reg <- aggte(csa_reg_det, type = "dynamic")},
-iterations = nb_it,
+iterations = n_it,
 check = FALSE  )    
 
 time_csa_reg
@@ -206,7 +210,7 @@ for (method in methods) {
     method = method,
     par_type_horizon = "long",  # ou "long"
     par_one_reg = FALSE,
-    min_iterations = nb_it
+    min_iterations = n_it
   )
 }
 
@@ -215,7 +219,7 @@ results_df_l <- rbindlist(results, idcol = "method")
 print(results_df_l[, .(method, median_time, memory, iterations)])
 
 
-nb_it <- 3
+n_it <- 3
 
 # Long and 1 regressions ----
 methods <- c("lpdid", "lpdid_rw", "lpdid_ipw")
@@ -227,7 +231,7 @@ for (method in methods) {
     method = method,
     par_type_horizon = "long",
     par_one_reg = TRUE,
-    min_iterations = nb_it
+    min_iterations = n_it
   )
 }
 

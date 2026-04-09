@@ -10,12 +10,12 @@ lpdidcsa_data(
   treat = "treat",
   unit = NULL,
   dependent = NULL,
-  nb_pre = NULL,
-  nb_post = NULL,
+  n_pre = NULL,
+  n_post = NULL,
   absorbing = TRUE,
+  p_variables = list(),
   h_variables = NULL,
-  type_horizon = "wide",
-  p_variables = list()
+  type_horizon = "wide"
 )
 }
 \arguments{
@@ -30,17 +30,23 @@ lpdidcsa_data(
 
 \item{dependent}{Character. Name of the dependent variable column.}
 
-\item{nb_pre}{Integer or \code{NULL}. Number of pre-treatment periods to
+\item{n_pre}{Integer or \code{NULL}. Number of pre-treatment periods to
 include. Defaults to all available pre-periods if \code{NULL} or
 non-integer. Capped at the maximum available in the data.}
 
-\item{nb_post}{Integer or \code{NULL}. Number of post-treatment periods to
+\item{n_post}{Integer or \code{NULL}. Number of post-treatment periods to
 include. Defaults to all available post-periods if \code{NULL} or
 non-integer. Capped at the maximum available in the data.}
 
 \item{absorbing}{Logical. If \code{TRUE} (default), treatment is assumed
 absorbing (once treated, always treated). If \code{FALSE}, treatment can
 switch on and off across periods.}
+
+\item{p_variables}{Named list of character vectors specifying
+horizon-specific control variables. List names follow the convention
+\code{"t0"}, \code{"t1"}, \code{"tm1"}, \code{"tm2"}, etc., where
+\code{"tm"} stands for \emph{t minus}. Use an empty list (default:
+\code{list()}) when no horizon-specific controls are needed.}
 
 \item{h_variables}{Character vector of column names to be carried through at
 every horizon (e.g. time-varying controls). Use \code{NULL} (default) if
@@ -49,12 +55,6 @@ not needed.}
 \item{type_horizon}{Character. Output structure: \code{"wide"} (default)
 creates one column per horizon; \code{"long"} stacks all horizons into a
 single \code{horizon} column.}
-
-\item{p_variables}{Named list of character vectors specifying
-horizon-specific control variables. List names follow the convention
-\code{"t0"}, \code{"t1"}, \code{"tm1"}, \code{"tm2"}, etc., where
-\code{"tm"} stands for \emph{t minus}. Use an empty list (default:
-\code{list()}) when no horizon-specific controls are needed.}
 }
 \value{
 A \code{data.table} with the original columns plus:
@@ -62,9 +62,9 @@ A \code{data.table} with the original columns plus:
 \item{\code{first.treat}}{First treatment period per unit (\code{NA}
 for never-treated). Only present when \code{absorbing = TRUE}.}
 \item{\code{last.treat}}{Most recent treatment period as of \emph{t}
-(\code{NA} if never treated yet).}
+(\code{NA} if never treated yet). Only present when \code{absorbing = FALSE}.}
 \item{\code{next.treat}}{Next upcoming treatment period (\code{NA} if
-no future treatment).}
+no future treatment). Only present when \code{absorbing = FALSE}.}
 \item{\code{dtreat}}{Change in treatment status:
 \eqn{D_{it} - D_{i,t-1}}.}
 \item{Horizon columns}{For \code{type_horizon = "wide"}: outcome and
@@ -81,18 +81,22 @@ Difference-in-Differences (LP-DiD) estimation following Dube et al. (2023)
 and Callaway & Sant'Anna (2021) style heterogeneity-robust event studies.
 }
 \examples{
-\dontrun{
-library(data.table)
+\donttest{
 data(mpdta_r, package = "lpdidcsa")
 
+# Initial mpdta_r characteristics
+print(colnames(mpdta_r)) 
+print(nrow(mpdta_r))
+print(ncol(mpdta_r))
+print(format(object.size(mpdta_r),units="Mb"))
+
 p_variables <- list(
-  t0  = c("lpop", "lpop2"),
-  tm1 = c("lpop", "lpop2"),
-  tm2 = c("lpop", "lpop2")
+  tm1 = c("lpop"),
+  tm2 = c("lpop")
 )
 
 # Wide format: one column per horizon
-df_wide <- lpdidcsa_data(
+suppressWarnings({df_wide <- lpdidcsa_data(
   data        = mpdta_r,
   unit        = "countyreal",
   time        = "year",
@@ -100,21 +104,32 @@ df_wide <- lpdidcsa_data(
   treat       = "treat",
   absorbing   = TRUE,
   p_variables = p_variables
-)
+)})
+
+print(colnames(df_wide))
+print(nrow(df_wide))
+print(ncol(df_wide))
+print(format(object.size(df_wide),units="Mb"))
 
 # Long format: one row per unit x reference-period x horizon
-df_long <- lpdidcsa_data(
+suppressWarnings({df_long <- lpdidcsa_data(
   data         = mpdta_r,
   unit         = "countyreal",
   time         = "year",
   dependent    = "lemp",
   treat        = "treat",
   absorbing    = TRUE,
-  type_horizon = "long",
-  p_variables  = p_variables
-)
-}
+  p_variables  = p_variables,
+  type_horizon = "long"   
+)})
 
+
+print(colnames(df_long))
+print(nrow(df_long))
+print(ncol(df_long))
+print(format(object.size(df_long),units="Mb"))
+
+}
 }
 \references{
 Dube, A., Girardi, D., Jorda, O., & Taylor, A. M. (2023).

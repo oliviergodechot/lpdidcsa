@@ -10,8 +10,8 @@ lpdidcsa(
   time = "year",
   unit = NULL,
   dependent = NULL,
-  nb_pre = NULL,
-  nb_post = NULL,
+  n_pre = NULL,
+  n_post = NULL,
   controls = NULL,
   controls_h = NULL,
   FE = NULL,
@@ -22,7 +22,7 @@ lpdidcsa(
   weight_h = NULL,
   meth = "lpdid_rw",
   absorbing = TRUE,
-  nonabs_reentry = NULL,
+  reentry = NULL,
   type_horizon = "wide",
   horizon = "horizon",
   one_reg = FALSE
@@ -42,10 +42,10 @@ of \code{lpdidcsa_data()}.}
 
 \item{dependent}{Character. Column name for the dependent variable.}
 
-\item{nb_pre}{Integer >= 0 or \code{NULL}. Number of pre-treatment horizons.
+\item{n_pre}{Integer >= 0 or \code{NULL}. Number of pre-treatment horizons.
 If \code{NULL}, all available pre-periods are used.}
 
-\item{nb_post}{Integer >= 0 or \code{NULL}. Number of post-treatment
+\item{n_post}{Integer >= 0 or \code{NULL}. Number of post-treatment
 horizons. If \code{NULL}, all available post-periods are used.}
 
 \item{controls}{Character vector of control variable column names, or
@@ -86,10 +86,10 @@ weights, or \code{NULL}.}
 absorbing and not-yet-treated units serve as controls. If \code{FALSE},
 a non-absorbing design is used.}
 
-\item{nonabs_reentry}{Integer or \code{NULL}. Only used when
-\code{absorbing = FALSE}. Minimum number of periods since last treatment
-for a unit to re-enter the DiD comparison set. \code{NULL} imposes no
-restriction on prior treatment.}
+\item{reentry}{Integer or \code{NULL}. If \code{absorbing = FALSE }, minimum
+number of periods  since last treatment for a unit to re-enter the DiD comparison
+set as a control unit or for a new treatment.
+\code{NULL} forbids reentry of already treated units (default: \code{NULL}).}
 
 \item{type_horizon}{Character. Whether the input \code{data} is in
 \code{"wide"} (default) or \code{"long"} format, as produced by
@@ -107,7 +107,7 @@ A named list with four elements:
 \describe{
 \item{\code{est}}{Main estimation results as a \code{data.table} with
 columns \code{h}, \code{variable}, \code{estimate}, \code{se},
-\code{T}, \code{pvalue}, \code{nb_obs}, \code{formula}.}
+\code{T}, \code{pvalue}, \code{n_obs}, \code{formula}.}
 \item{\code{est_det}}{Cohort-level (disaggregated) estimates as a
 \code{data.table}. Non-\code{NULL} for CSA and adjusted methods
 only.}
@@ -124,34 +124,77 @@ Difference-in-Differences (LP-DiD). Six estimators are supported:
 \details{
 \describe{
 \item{\code{"lpdid"}}{LP-DiD with control variables. Yields a
-variance-weighted ATT under the control-variable homogeneity
-hypothesis.}
+variance-weighted ATT under the hypothesis that treatment effects do not
+vary with the value of covariates.}
 \item{\code{"lpdid_rw"}}{Reweighted LP-DiD with control variables.
-Yields an equally-weighted ATT under the control-variable homogeneity
-hypothesis.}
+Yields an equally-weighted ATT under the hypothesis that treatment effects do not
+vary with the value of covariates.}
 \item{\code{"lpdid_adj"}}{LP-DiD with adjusted regression via
 \code{avg_comparisons}. Yields an equally-weighted ATT (slower).}
 \item{\code{"lpdid_ipw"}}{LP-DiD with inverse probability weighting.
 Yields an equally-weighted ATT.}
+\item{\code{"lpcsa"}}{LP-CSA with control variables. Yields an
+equally-weighted ATT under the hypothesis that treatment effects do not
+vary with the value of covariates.}
 \item{\code{"lpcsa_ipw"}}{LP-CSA with inverse probability weighting
 (local-projection version of Callaway & Sant'Anna).}
-\item{\code{"lpcsa"}}{LP-CSA with control variables. Yields an
-equally-weighted ATT under the control-variable homogeneity
-hypothesis.}
 }
 }
 \examples{
-\dontrun{
-library(data.table); library(fixest); library(ggplot2); library(did)
+\donttest{
 data(mpdta_r, package = "lpdidcsa")
 
-# Prepare data, then estimate with reweighted LP-DiD
-df  <- lpdidcsa_data(mpdta_r, unit = "countyreal", time = "year",
-                     dependent = "lemp", treat = "treat")
+# Data preparation (with wide format horizons)
+suppressWarnings({df  <- lpdidcsa_data(mpdta_r, unit = "countyreal", time = "year",
+                     dependent = "lemp", treat = "treat")})
+
+                     
+# 1. Estimation with lpdid_rw and no covariates
 res <- lpdidcsa(df, unit = "countyreal", time = "year",
                 dependent = "lemp", meth = "lpdid_rw")
-res$plot
-res$est
+                
+# Horizon estimates
+print(res$plot)
+print(res$est)
+
+
+# 2. Estimation with lpcsa and no covariates
+res <- lpdidcsa(df, unit = "countyreal", time = "year",
+                dependent = "lemp", meth = "lpcsa")
+                
+# Horizon estimates
+print(res$plot)
+print(res$est)
+
+# Cohort * horizon estimates
+print(res$est_det)
+
+
+# 3. Estimation with lpdid_ipw and covariates                    
+res <- lpdidcsa(df, unit = "countyreal", time = "year",
+                dependent = "lemp", meth = "lpdid_ipw",controls="lpop")
+
+# Horizon estimates
+print(res$plot)
+print(res$est)
+
+# First stage propensity score estimates
+print(res$ps)
+
+# 4. Estimation with lpcsa_ipw and covariates
+res <- lpdidcsa(df, unit = "countyreal", time = "year",
+                dependent = "lemp", meth = "lpcsa_ipw",controls="lpop")
+
+# Horizon estimates
+print(res$plot)
+print(res$est)
+
+# Cohort * horizon estimates
+print(res$est_det)
+
+# First stage propensity score estimates
+print(res$ps)
+
 }
 
 }

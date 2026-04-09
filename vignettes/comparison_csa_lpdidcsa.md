@@ -2,7 +2,7 @@ Comparing `lpdidcsa` and `did` Packages for Difference-in-Differences
 Estimation
 ================
 Olivier Godechot
-2026-04-08
+2026-04-09
 
 # Introduction
 
@@ -66,6 +66,9 @@ ggdid(csa_ipw)
 
 ### Using `lpdidcsa` Package
 
+To obtain equivalent results to those of the `did` package, we interact
+covariates with time dummy variables.
+
 ``` r
 lpdidcsa_ipw <- lpdidcsa(
   data = mpdta_w,
@@ -127,6 +130,9 @@ ggdid(csa_adj)
 ![](comparison_csa_lpdidcsa_files/figure-gfm/adj-did-1.png)<!-- -->
 
 ### Using `lpdidcsa` Package
+
+Here again, to obtain equivalent results to those of the `did` package,
+we interact covariates with time dummy variables.
 
 ``` r
 lpdidcsa_adj <- lpdidcsa(

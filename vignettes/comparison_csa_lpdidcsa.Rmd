@@ -68,6 +68,8 @@ ggdid(csa_ipw)
 
 ### Using `lpdidcsa` Package
 
+To obtain equivalent results to those of the `did` package, we interact covariates with time dummy variables.
+
 ```{r ipw-did}
 lpdidcsa_ipw <- lpdidcsa(
   data = mpdta_w,
@@ -115,6 +117,8 @@ ggdid(csa_adj)
 ```
 
 ### Using `lpdidcsa` Package
+
+Here again, to obtain equivalent results to those of the `did` package, we interact covariates with time dummy variables.
 
 ```{r adj-lpdidcsa}
 lpdidcsa_adj <- lpdidcsa(
