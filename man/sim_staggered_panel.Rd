@@ -25,7 +25,7 @@ sim_staggered_panel(
   p_move = 0.05,
   base_log_earnings = 10,
   sigma_eps = 0.15,
-  seed = 42L,
+  seed = 1973L,
   verbose = TRUE
 )
 }
@@ -99,7 +99,7 @@ shock \eqn{\varepsilon_{it}}. Default: \code{0.15}.}
 
 \item{seed}{Integer or \code{NULL}. Passed to \code{\link{set.seed}}.
 Use \code{NULL} to skip seeding (e.g. inside a Monte Carlo loop that
-manages its own seed). Default: \code{42}.}
+manages its own seed). Default: \code{1973}.}
 
 \item{verbose}{Logical. If \code{TRUE}, prints sanity-check tables
 (treatment shares, cohort distribution, true ATT by event-time, firm

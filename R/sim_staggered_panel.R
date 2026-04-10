@@ -135,7 +135,7 @@
 #'   shock \eqn{\varepsilon_{it}}. Default: \code{0.15}.
 #' @param seed Integer or \code{NULL}. Passed to \code{\link{set.seed}}.
 #'   Use \code{NULL} to skip seeding (e.g. inside a Monte Carlo loop that
-#'   manages its own seed). Default: \code{42}.
+#'   manages its own seed). Default: \code{1973}.
 #' @param verbose Logical. If \code{TRUE}, prints sanity-check tables
 #'   (treatment shares, cohort distribution, true ATT by event-time, firm
 #'   FE variance, mobility rate) and renders four diagnostic ggplot2 figures.
@@ -239,7 +239,7 @@ sim_staggered_panel <- function(
   base_log_earnings = 10.0,
   sigma_eps         = 0.15,
   # --- Misc ---
-  seed              = 42L,
+  seed              = 1973L,
   verbose           = TRUE
 ) {
   
