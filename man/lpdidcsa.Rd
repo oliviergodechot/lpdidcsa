@@ -20,7 +20,7 @@ lpdidcsa(
   clusters_h = NULL,
   weight = NULL,
   weight_h = NULL,
-  meth = "lpdid_rw",
+  meth = "lpdid_ipw",
   absorbing = TRUE,
   reentry = NULL,
   type_horizon = "wide",
@@ -80,7 +80,7 @@ weights, or \code{NULL}.}
 
 \item{meth}{Character. Estimator to use. One of \code{"lpdid"},
 \code{"lpdid_rw"}, \code{"lpdid_adj"}, \code{"lpdid_ipw"},
-\code{"lpcsa_ipw"}, \code{"lpcsa"} (default: \code{"lpdid_rw"}).}
+\code{"lpcsa_ipw"}, \code{"lpcsa"} (default: \code{"lpdid_ipw"}).}
 
 \item{absorbing}{Logical. If \code{TRUE} (default), treatment is assumed
 absorbing and not-yet-treated units serve as controls. If \code{FALSE},

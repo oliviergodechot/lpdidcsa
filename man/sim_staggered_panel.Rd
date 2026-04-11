@@ -8,8 +8,8 @@ sim_staggered_panel(
   n = 50000L,
   Tmax = 20L,
   p_treat = 0.1,
-  t_min_treat = 1L,
-  t_max_treat = 20L,
+  t_min_treat = 4L,
+  t_max_treat = 16L,
   att_profile = c(-0.02, -0.03, -0.037, -0.039, -0.04),
   early_cutoff = 10L,
   early_multiplier = 2,
@@ -39,10 +39,10 @@ Default: \code{20}.}
 Default: \code{0.10}.}
 
 \item{t_min_treat}{Integer. Earliest possible treatment cohort.
-Default: \code{1}.}
+Default: \code{4}.}
 
 \item{t_max_treat}{Integer. Latest possible treatment cohort.
-Must satisfy \code{t_max_treat <= Tmax}. Default: \code{20}.}
+Must satisfy \code{t_max_treat <= Tmax}. Default: \code{16}.}
 
 \item{att_profile}{Numeric vector. Average treatment effect (in log-points)
 at event-times \eqn{k = 0, 1, 2, \ldots} (\strong{k=0 convention}: k=0

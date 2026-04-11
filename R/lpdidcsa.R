@@ -59,7 +59,7 @@
 #' weights, or \code{NULL}.
 #' @param meth Character. Estimator to use. One of \code{"lpdid"},
 #'   \code{"lpdid_rw"}, \code{"lpdid_adj"}, \code{"lpdid_ipw"},
-#'   \code{"lpcsa_ipw"}, \code{"lpcsa"} (default: \code{"lpdid_rw"}).
+#'   \code{"lpcsa_ipw"}, \code{"lpcsa"} (default: \code{"lpdid_ipw"}).
 #' @param absorbing Logical. If \code{TRUE} (default), treatment is assumed
 #'   absorbing and not-yet-treated units serve as controls. If \code{FALSE},
 #'   a non-absorbing design is used.
@@ -174,7 +174,7 @@ lpdidcsa <- function(data,
                      clusters_h     = NULL,
                      weight         = NULL,
                      weight_h       = NULL,                     
-                     meth           = "lpdid_rw",
+                     meth           = "lpdid_ipw",
                      absorbing      = TRUE,
                      reentry        = NULL,
                      type_horizon   = "wide",
@@ -833,16 +833,20 @@ lpdidcsa <- function(data,
           b_weight_h <- var_at(h,col_var=weight_h)
           col_weight <- b_weight_h}
         
-        
         # Propensity score: logit of dtreat on controls, with time FE
-        formula_ps <- if (!is.null(controls))
-          paste0(col_dtreat, " ~ ", paste(controls, collapse = " + "),
-                 " | ", col_time)
-        else if (!is.null(FE))
-          paste0(col_dtreat, " ~ i(", col_time, ") | ",
-                 paste(FE, collapse = " + "))
-        else
-          paste0(col_dtreat, " ~ i(", col_time, ")")
+        formula_ps <- if (!is.null(controls) & is.null(FE)) 
+          {
+            paste0(col_dtreat, " ~ ", paste(controls, collapse = " + "),
+                   " | ", col_time) 
+          } else if (is.null(controls) & !is.null(FE)) {
+            paste0(col_dtreat, " ~ i(", col_time, ") | ",
+                   paste(FE, collapse = " + "))
+          } else if (!is.null(controls) & !is.null(FE)) {
+            paste0(col_dtreat, " ~ ", paste(controls, collapse = " + "),
+                   " + i(", col_time, ") | ",paste(FE, collapse = " + "))  
+          } else if (is.null(controls) & is.null(FE)) {
+            paste0(col_dtreat, " ~ i(", col_time, ")")
+          }
         
         ps_mod       <- fit_feglm(formula_ps, clean_df, col_weight)
         ps_list[[i]] <- export_coeftable(ps_mod, h, formula_ps)
@@ -886,14 +890,18 @@ lpdidcsa <- function(data,
       b_weight_h <- var_at(h,col_var=weight_h)
       col_weight <- b_weight_h}
     
-    formula_ps <- if (!is.null(controls)) {
+    formula_ps <- if (!is.null(controls) & is.null(FE)) {
       controls <- paste0("i(",col_horizon,")*(", controls, ")")
       paste0(col_dtreat, " ~ ", paste(controls, collapse = " + "),
              ":i(",col_horizon,") | ", col_time, "^",col_horizon)
-    } else if (!is.null(FE)) {
+    } else if (is.null(controls) & !is.null(FE)) {
       paste0(col_dtreat, " ~ i(", col_time, ",i.",col_horizon,") | ",
              paste(paste0(FE, "^",col_horizon), collapse = " + "))
-    } else {
+    } else if (!is.null(controls) & !is.null(FE)) {
+      paste0(col_dtreat, " ~", paste(controls, collapse = " + "),
+             ":i(",col_horizon,") + i(", col_time, ",i.",col_horizon,") | ",
+             paste(paste0(FE, "^",col_horizon), collapse = " + "))
+      } else if (is.null(controls) & is.null(FE)) {
       paste0(col_dtreat, " ~ i(", col_time, ",i.",col_horizon,")")
     }
     

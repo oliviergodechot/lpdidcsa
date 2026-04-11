@@ -92,9 +92,9 @@
 #' @param p_treat Numeric in (0, 1). Share of individuals ever treated.
 #'   Default: \code{0.10}.
 #' @param t_min_treat Integer. Earliest possible treatment cohort.
-#'   Default: \code{1}.
+#'   Default: \code{4}.
 #' @param t_max_treat Integer. Latest possible treatment cohort.
-#'   Must satisfy \code{t_max_treat <= Tmax}. Default: \code{20}.
+#'   Must satisfy \code{t_max_treat <= Tmax}. Default: \code{16}.
 #' @param att_profile Numeric vector. Average treatment effect (in log-points)
 #'   at event-times \eqn{k = 0, 1, 2, \ldots} (\strong{k=0 convention}: k=0
 #'   is the first period of treatment, i.e. \eqn{t = g_i}). Element \code{j}
@@ -215,8 +215,8 @@ sim_staggered_panel <- function(
   Tmax              = 20L,
   # --- Treatment ---
   p_treat           = 0.10,
-  t_min_treat       = 1L,
-  t_max_treat       = 20L,
+  t_min_treat       = 4L,
+  t_max_treat       = 16L,
   # --- ATT profile (k=0 convention) ---
   att_profile       = c(-0.02, -0.03, -0.037, -0.039, -0.04),
   # --- Cohort heterogeneity ---
