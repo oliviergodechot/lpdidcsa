@@ -231,6 +231,7 @@ lpdidcsa <- function(data,
   col_clusters <- if (!is.null(clusters)) clusters else unit
   col_weight  <- weight
   col_dep_tm1 <- paste0(col_dep, "_tm1")
+  col_horizon <- horizon
   
   # Backup of variables for managing h_variables
   b_controls <- controls
@@ -249,8 +250,8 @@ lpdidcsa <- function(data,
     max_n_post <- max(time_dep)
     
   } else if (type_horizon == "long") {
-    max_n_pre  <- -df[, min(horizon, na.rm = TRUE)]
-    max_n_post <-  df[, max(horizon, na.rm = TRUE)]
+    max_n_pre  <- -df[, min(get(col_horizon), na.rm = TRUE)]
+    max_n_post <-  df[, max(get(col_horizon), na.rm = TRUE)]
   }
   
   # Cap n_pre / n_post at what the data supports
@@ -324,7 +325,7 @@ lpdidcsa <- function(data,
     }
     
     if (type_horizon == "long") {
-      df[keep & base_filter & horizon == h]
+      df[keep & base_filter & get(col_horizon) == h]
     } else {
       df[keep & base_filter]
     }
@@ -339,19 +340,19 @@ lpdidcsa <- function(data,
     if (absorbing) {
       keep <- (df[[col_dtreat]] == 1 |
                  is.na(df$first.treat) |
-                 (!is.na(df$first.treat) & df[[horizon]] <  0 & df[[col_time]] <  df$first.treat) |
-                 (!is.na(df$first.treat) & df[[horizon]] >= 0 & df[[col_time]] + df[[horizon]] < df$first.treat))
+                 (!is.na(df$first.treat) & df[[col_horizon]] <  0 & df[[col_time]] <  df$first.treat) |
+                 (!is.na(df$first.treat) & df[[col_horizon]] >= 0 & df[[col_time]] + df[[col_horizon]] < df$first.treat))
     } else if (is.null(reentry)) {
       keep <- (is.na(df$last.treat) &
                  (is.na(df$next.treat) |
                     (!is.na(df$next.treat) &
-                       df[[col_time]] + df[[horizon]] * (df[[horizon]] >= 0) < df$next.treat)))
+                       df[[col_time]] + df[[col_horizon]] * (df[[col_horizon]] >= 0) < df$next.treat)))
     } else {
       keep <- ((is.na(df$last.treat) |
                   df[[col_time]] - df$last.treat > reentry) &
                  (is.na(df$next.treat) |
                     (!is.na(df$next.treat) &
-                       df[[col_time]] + df[[horizon]] * (df[[horizon]] >= 0) < df$next.treat)))
+                       df[[col_time]] + df[[col_horizon]] * (df[[col_horizon]] >= 0) < df$next.treat)))
     }
     df[keep & base_filter]
   }
@@ -399,9 +400,9 @@ lpdidcsa <- function(data,
       formula  = formula_str
     )
     h <- as.numeric(ifelse(
-      regexpr("horizon::", out$variable) > 0,
+      regexpr(paste0(col_horizon,"::"), out$variable) > 0,
       substr(out$variable,
-             regexpr("horizon::", out$variable) + 9,
+             regexpr(paste0(col_horizon,"::"), out$variable) + nchar(col_horizon) + 2,
              nchar(out$variable)),
       -1
     ))
@@ -435,9 +436,9 @@ lpdidcsa <- function(data,
       formula  = formula_str
     )
     h <- as.numeric(ifelse(
-      regexpr("horizon::", out$variable) > 0,
+      regexpr(paste0(col_horizon,"::"), out$variable) > 0,
       substr(out$variable,
-             regexpr("horizon::", out$variable) + 9,
+             regexpr(paste0(col_horizon,"::"), out$variable) + nchar(col_horizon) + 2,
              nchar(out$variable)),
       -1
     ))
@@ -471,7 +472,7 @@ lpdidcsa <- function(data,
   # Same reweighting for long format / one_reg = TRUE
   # Uses horizon x time FE interaction in the first-stage regression.
   add_rewgt_long <- function(df, col_w = NULL) {
-    formula_rw <- as.formula(paste0(col_dtreat, " ~ 1 | horizon^", col_time))
+    formula_rw <- as.formula(paste0(col_dtreat, " ~ 1 | ",col_horizon,"^", col_time))
     wgtreg <- if (is.null(col_w))
       feols(formula_rw, data = df)
     else
@@ -481,7 +482,7 @@ lpdidcsa <- function(data,
     df[, num_wgt_h := fifelse(is.na(get(col_dtreat)) | get(col_dtreat) == 0,
                               NA, num_wgt_h)]
     df[, wgt_h     := num_wgt_h / sum(num_wgt_h, na.rm = TRUE)]
-    df[, gwgt_h    := max(wgt_h, na.rm = TRUE), by = list(get(col_time), horizon)]
+    df[, gwgt_h    := max(wgt_h, na.rm = TRUE), by = list(get(col_time), get(col_horizon))]
     df[, wgt_h     := fifelse(is.na(wgt_h), gwgt_h, wgt_h)]
     df[, rewgt_h   := if (is.null(col_w)) 1 / wgt_h else get(col_w) / wgt_h]
     df[, c("num_wgt_h", "wgt_h", "gwgt_h") := NULL]
@@ -585,11 +586,11 @@ lpdidcsa <- function(data,
       col_weight <- b_weight_h}
     
     rhs_main    <- if (!is.null(FE))
-      paste0(col_dtreat, ":i(horizon) + i(", col_time, "i.horizon)")
+      paste0(col_dtreat, ":i(",col_horizon,") + i(", col_time, "i.",col_horizon,")")
     else
-      paste0(col_dtreat, ":i(horizon)")
-    controls <- paste0("i(horizon)*(", controls, ")")
-    fe_part     <- if (!is.null(FE)) paste(FE, "^horizon") else paste0("horizon^", col_time)
+      paste0(col_dtreat, ":i(",col_horizon,")")
+    if (!is.null(controls)) controls <- paste0("i(",col_horizon,")*(", controls, ")")
+    fe_part     <- if (!is.null(FE)) paste(FE, "^",col_horizon) else paste0(col_horizon,"^", col_time)
     formula     <- build_formula(lhs(h), rhs_main, controls, fe_part)
     mod         <- fit_feols(formula, clean_df, col_clusters, col_weight)
     did_est     <- export_coeftable_long(mod, formula)
@@ -661,11 +662,11 @@ lpdidcsa <- function(data,
                             parse_col_names(FE)))
     clean_df    <- add_rewgt_long(clean_df, col_weight)
     rhs_main    <- if (!is.null(FE))
-      paste0(col_dtreat, ":i(horizon) + i(", col_time, ",i.horizon)")
+      paste0(col_dtreat, ":i(",col_horizon,") + i(", col_time, ",i.",col_horizon,")")
     else
-      paste0(col_dtreat, ":i(horizon)")
-    fe_part     <- if (!is.null(FE)) paste0(FE, "^horizon") else paste0("horizon^", col_time)
-    controls <- paste0("i(horizon)*(", controls, ")")
+      paste0(col_dtreat, ":i(",col_horizon,")")
+    fe_part     <- if (!is.null(FE)) paste0(FE, "^",col_horizon) else paste0(col_horizon,"^", col_time)
+    if (!is.null(controls)) controls <- paste0("i(",col_horizon,")*(", controls, ")")
     formula     <- build_formula(lhs(h), rhs_main, controls, fe_part)
     
     mod <- feols(as.formula(formula),
@@ -763,23 +764,23 @@ lpdidcsa <- function(data,
       b_weight_h <- var_at(h,col_var=weight_h)
       col_weight <- b_weight_h}
     
-    rhs_main <- paste0(col_dtreat, "*factor(horizon)*factor(", col_time, ")")
+    rhs_main <- paste0(col_dtreat, "*factor(",col_horizon,")*factor(", col_time, ")")
     
     if (is.null(controls) & is.null(FE)) {
       formula <- paste0("(", lhs(h), ")~ ", rhs_main)
     } else if (is.null(controls) & !is.null(FE)) {
       formula <- paste0("(", lhs(h), ")~ ", rhs_main, "   | ",
-                        paste(paste0(FE, "^", col_dtreat, "^horizon"),
+                        paste(paste0(FE, "^", col_dtreat, "^",col_horizon),
                               collapse = " + "))
     } else if (!is.null(controls) & is.null(FE)) {
       formula <- paste0("(", lhs(h), ")~", rhs_main, "  + ", col_dtreat,
-                        " * factor(horizon) * (",
+                        " * factor(",col_horizon,") * (",
                         paste(controls, collapse = " + "), ")")
     } else {
       formula <- paste0("(", lhs(h), ")~ ", rhs_main, "  + ", col_dtreat,
-                        " * factor(horizon) * (",
+                        " * factor(",col_horizon,") * (",
                         paste(controls, collapse = " + "), ") | ",
-                        paste(paste0(FE, "^", col_dtreat, "^horizon"),
+                        paste(paste0(FE, "^", col_dtreat, "^",col_horizon),
                               collapse = " + "))
     }
     
@@ -792,14 +793,14 @@ lpdidcsa <- function(data,
       variables = col_dtreat,
       type      = "response",
       newdata   = clean_df[clean_df[[col_dtreat]] == 1, ],
-      by        = "horizon",
+      by        = col_horizon,
       vcov      = "HC1"
     )
 
     
     did_est     <- as.data.table(data.frame(out_h[, 1:6], mod$nobs))
     did_est_det <- export_coeftable_long(mod, formula)
-    setnames(did_est, "horizon", "h")
+    setnames(did_est, col_horizon, "h")
     
     # Harmonise column names from avg_comparisons output
     setnames(did_est,
@@ -886,14 +887,14 @@ lpdidcsa <- function(data,
       col_weight <- b_weight_h}
     
     formula_ps <- if (!is.null(controls)) {
-      controls <- paste0("i(horizon)*(", controls, ")")
+      controls <- paste0("i(",col_horizon,")*(", controls, ")")
       paste0(col_dtreat, " ~ ", paste(controls, collapse = " + "),
-             ":i(horizon) | ", col_time, "^horizon")
+             ":i(",col_horizon,") | ", col_time, "^",col_horizon)
     } else if (!is.null(FE)) {
-      paste0(col_dtreat, " ~ i(", col_time, ",i.horizon) | ",
-             paste(paste0(FE, "^horizon"), collapse = " + "))
+      paste0(col_dtreat, " ~ i(", col_time, ",i.",col_horizon,") | ",
+             paste(paste0(FE, "^",col_horizon), collapse = " + "))
     } else {
-      paste0(col_dtreat, " ~ i(", col_time, ",i.horizon)")
+      paste0(col_dtreat, " ~ i(", col_time, ",i.",col_horizon,")")
     }
     
     ps_mod  <- fit_feglm(formula_ps, clean_df, col_weight)
@@ -908,7 +909,7 @@ lpdidcsa <- function(data,
     clean_df <- add_rewgt_long(clean_df, col_w = "attwgt")
     
     formula_reg <- paste0(lhs(h), " ~ ", col_dtreat,
-                          ":i(horizon) | ", col_time, "^horizon")
+                          ":i(",col_horizon,") | ", col_time, "^",col_horizon)
     mod <- feols(as.formula(formula_reg),
                  cluster = clean_df[,..col_clusters],
                  weights = clean_df$rewgt_h,
@@ -1011,20 +1012,20 @@ lpdidcsa <- function(data,
       col_weight <- b_weight_h}
     
     formula_ps <- if (!is.null(controls) && !is.null(FE)) {
-      controls <- paste0("i(horizon)*(", controls, ")")
+      controls <- paste0("i(",col_horizon,")*(", controls, ")")
       paste0(col_dtreat,
-             " ~ factor(horizon)*(i(", col_time, ") + (",
+             " ~ factor(",col_horizon,")*(i(", col_time, ") + (",
              paste(controls, collapse = " + "), ")) | ",
-             paste(paste0(FE, "^horizon"), collapse = " + "))
+             paste(paste0(FE, "^",col_horizon), collapse = " + "))
     } else if (!is.null(controls)) {
-      paste0(col_dtreat, " ~ factor(horizon)*(",
+      paste0(col_dtreat, " ~ factor(",col_horizon,")*(",
              paste(controls, collapse = " + "), ") | ",
-             col_time, "^horizon")
+             col_time, "^",col_horizon,"")
     } else if (!is.null(FE)) {
-      paste0(col_dtreat, " ~ factor(horizon)*i(", col_time, ") | ",
-             paste(paste0(FE, "^horizon"), collapse = " + "))
+      paste0(col_dtreat, " ~ factor(",col_horizon,")*i(", col_time, ") | ",
+             paste(paste0(FE, "^",col_horizon), collapse = " + "))
     } else {
-      paste0(col_dtreat, " ~ factor(horizon)*i(", col_time, ")")
+      paste0(col_dtreat, " ~ factor(",col_horizon,")*i(", col_time, ")")
     }
     
     ps_mod  <- fit_feglm(formula_ps, clean_df, col_weight)
@@ -1037,8 +1038,8 @@ lpdidcsa <- function(data,
       clean_df[, attwgt := get(col_weight) * attwgt]
     
     formula_reg <- paste0(lhs(h), " ~  ", col_dtreat,
-                          ":i(horizon,i.", col_time, ") | ",
-                          col_time, "^horizon")
+                          ":i(",col_horizon,",i.", col_time, ") | ",
+                          col_time, "^",col_horizon)
 
     mod <- feols(as.formula(formula_reg),
                  data    = clean_df,
@@ -1051,13 +1052,13 @@ lpdidcsa <- function(data,
     
     mod_agg  <- aggregate(mod,
                           paste0("(", col_dtreat,
-                                 ":horizon)::(-?[[:digit:]]+)"))
+                                 ":",col_horizon,")::(-?[[:digit:]]+)"))
 
     agg_h    <- export_agg_long(
       model       = mod_agg,
       model_det   = mod,
       formula_str = paste0("aggregate(mod,(", col_dtreat,
-                           ":horizon)::(-?[[:digit:]]+)")
+                           ":",col_horizon,")::(-?[[:digit:]]+)")
     )
     agg_list <- agg_h
     
@@ -1133,9 +1134,10 @@ lpdidcsa <- function(data,
       b_weight_h <- var_at(h,col_var=weight_h)
       col_weight <- b_weight_h}
     
-    rhs_main         <- paste0(col_dtreat, ":i(horizon,i.", col_time, ")")
-    fe_part          <- if (!is.null(FE)) paste0(FE, "^horizon") else paste0(col_time, "^horizon")
-    p_variables_part <- paste0("i(horizon):(", paste(controls, collapse = " + "), ")")
+    rhs_main         <- paste0(col_dtreat, ":i(",col_horizon,",i.", col_time, ")")
+    fe_part          <- if (!is.null(FE)) paste0(FE, "^",col_horizon) else paste0(col_time, "^",col_horizon)
+    if (!is.null(controls)) p_variables_part <- paste0("i(",col_horizon,"):(", paste(controls, collapse = " + "), ")")
+    else p_variables_part <- NULL
     formula          <- build_formula(lhs(h), rhs_main, p_variables_part, fe_part)
     
     mod <- fit_feols(formula, clean_df, col_clusters, col_weight)
@@ -1146,12 +1148,12 @@ lpdidcsa <- function(data,
     
     mod_agg  <- aggregate(mod,
                           paste0("(", col_dtreat,
-                                 ":horizon)::(-?[[:digit:]]+)"))
+                                 ":",col_horizon,")::(-?[[:digit:]]+)"))
     agg_h    <- export_agg_long(
       model       = mod_agg,
       model_det   = mod,
       formula_str = paste0("aggregate(mod,(", col_dtreat,
-                           ":horizon)::(-?[[:digit:]]+)")
+                           ":",col_horizon,")::(-?[[:digit:]]+)")
     )
     agg_list <- agg_h
     
