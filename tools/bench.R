@@ -1,15 +1,16 @@
 # ______________________________________________________________________________
-# Lpdidcsa timing Script 
+# Lpdidcsa timing Script -------------------------------------------------------
 # ______________________________________________________________________________
 
-
+## Libraries ----
 library(bench)
 library(data.table)
 library(lpdidcsa)
 library(did)
 library(fixest)
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
-# Parameters ----
+## Parameters ----
 
 
 # List of  methods to test
@@ -19,13 +20,13 @@ methods <- c("lpdid", "lpdid_rw", "lpdid_adj","lpdid_ipw", "lpcsa", "lpcsa_ipw")
 # methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw")
 
 #Number of individuals
-n_indiv <- 5000L
+no_indiv <- 5000L
 
 #Number of firms
-n_firms <- 100L
+no_firms <- 100L
 
 # Creation of a toy data 
-toydata <- sim_staggered_panel(n=n_indiv,n_firms=n_firms,
+toydata <- sim_staggered_panel(n=no_indiv,n_firms=no_firms,
                                t_min_treat = 2L,
                                t_max_treat = 19L)
 
@@ -35,7 +36,7 @@ toydata[,g_i:=fifelse(is.na(g_i),0,g_i)]
 
 
 
-# Format wide -------------------------------
+## Format wide -------------------------------
 par_type_horizon <- "wide"
 par_one_reg <- F
 
@@ -59,8 +60,6 @@ time$median
 size_df <- format(object.size(df),units="Mb")
 size_df
 colnames(df)
-nrow(df)
-ncol(df)
 
 ## Long horizon database ---------------------
 time <- bench::mark({df_l  <- lpdidcsa_data(toydata, 
@@ -77,15 +76,13 @@ df_l[,g_i:=NULL]
 time$median
 
 
-size_df_l <- format(object.size(df_l),units="Mb")
-size_df_l
+size_df <- format(object.size(df_l),units="Mb")
+size_df
 colnames(df_l)
-nrow(df_l)
-ncol(df_l)
 
 
 
-n_it <- 10
+nb_it <- 10
 
 method <- "lpdid_ipw"
 
@@ -105,24 +102,25 @@ bench_method <- function(df, method, par_type_horizon, par_one_reg, min_iteratio
         )
       },
       iterations = min_iterations,
-      check = FALSE  
+      check = FALSE,
+      memory = FALSE
     )
     
     # Simplified summary
     list(
       method = method,
       median_time = result$median,  
-      memory = result$mem_alloc,  
       iterations = result$n_itr   
     )
   }, error = function(e) {
     message(paste("Error for the method", method, ":", e$message))
     return(NULL)
   })
+  
 }
 
 
-# Wide ----
+## Wide ----
 methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw")
 results <- list()
 for (method in methods) {
@@ -132,35 +130,18 @@ for (method in methods) {
     method = method,
     par_type_horizon = "wide",
     par_one_reg = FALSE,
-    min_iterations = n_it
+    min_iterations = nb_it
   )
 }
 
 # Display results
 results_df <- rbindlist(results, idcol = "method")
-print(results_df[, .(method, median_time, memory, iterations)])
+print(results_df[, .(method, median_time,  iterations)])
 
 
-# Wide method adj----
-methods <- c("lpdid_adj")
-results <- list()
-for (method in methods) {
-  cat("Benchmarking method:", method, "\n")
-  results[[method]] <- bench_method(
-    df = df,
-    method = method,
-    par_type_horizon = "wide",  # ou "long"
-    par_one_reg = FALSE,
-    min_iterations = 2
-  )
-}
+gc()
 
-# Display results
-results_df_adj <- rbindlist(results, idcol = "method")
-print(results_df_adj[, .(method, median_time, memory, iterations)])
-
-
-# CSA ipw ----
+## CSA ipw ----
 time_csa_ipw <- bench::mark({csa_ipw_det <- att_gt(yname="log_earnings",
                       tname="t",
                       idname="id",
@@ -173,13 +154,14 @@ time_csa_ipw <- bench::mark({csa_ipw_det <- att_gt(yname="log_earnings",
                       xformla=~female,
                       data=toydata)
                       csa_ipw <- aggte(csa_ipw_det, type = "dynamic")},
-                    iterations = n_it,
-                    check = FALSE  )    
+                    iterations = nb_it,
+                    check = FALSE,
+                    memory = FALSE)    
 
 time_csa_ipw
 
 
-# CSA reg ----
+## CSA reg ----
 time_csa_reg <- bench::mark({csa_reg_det <- att_gt(yname="log_earnings",
                                                    tname="t",
                                                    idname="id",
@@ -192,15 +174,16 @@ time_csa_reg <- bench::mark({csa_reg_det <- att_gt(yname="log_earnings",
                                                    xformla=~female,
                                                    data=toydata)
 csa_reg <- aggte(csa_reg_det, type = "dynamic")},
-iterations = n_it,
-check = FALSE  )    
+iterations = nb_it,
+check = FALSE,
+memory = FALSE)    
 
 time_csa_reg
 
 
 
-
-# Long multiple regressions ----
+gc()
+## Long multiple regressions ----
 methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw")
 results <- list()
 for (method in methods) {
@@ -210,19 +193,19 @@ for (method in methods) {
     method = method,
     par_type_horizon = "long",  # ou "long"
     par_one_reg = FALSE,
-    min_iterations = n_it
+    min_iterations = nb_it
   )
 }
 
 # Display results
 results_df_l <- rbindlist(results, idcol = "method")
-print(results_df_l[, .(method, median_time, memory, iterations)])
+print(results_df_l[, .(method, median_time,  iterations)])
 
+gc()
 
-n_it <- 3
-
-# Long and 1 regressions ----
-methods <- c("lpdid", "lpdid_rw", "lpdid_ipw")
+## Long and 1 regressions ----
+nb_it <- 3
+methods <- c("lpdid", "lpdid_rw", "lpdid_ipw","lpcsa","lpcsa_ipw")
 results <- list()
 for (method in methods) {
   cat("Benchmarking méthode:", method, "\n")
@@ -231,22 +214,22 @@ for (method in methods) {
     method = method,
     par_type_horizon = "long",
     par_one_reg = TRUE,
-    min_iterations = n_it
+    min_iterations = nb_it
   )
 }
 
 # Display results
 results_df_l1 <- rbindlist(results, idcol = "method")
-print(results_df_l1[, .(method, median_time, memory, iterations)])
-str(results_df)
+print(results_df_l1[, .(method, median_time,  iterations)])
 
 
-# Aggregation of results -----
+
+## Aggregation of results -----
 
 # did csa results
-csa <- rbind( setDT(time_csa_ipw[,c("median","mem_alloc","n_itr")]),
-              setDT(time_csa_reg[,c("median","mem_alloc","n_itr")]))
-colnames(csa) <- c("median_time","memory","iterations")
+csa <- rbind( setDT(time_csa_ipw[,c("median","n_itr")]),
+              setDT(time_csa_reg[,c("median","n_itr")]))
+colnames(csa) <- c("median_time","iterations")
 csa
 csa$method <- c("did:ipw","did:reg")
 csa
@@ -267,3 +250,28 @@ all <- all[,-2]
 all
 
 write.csv(all,"bench.csv",row.names = F)
+
+gc()
+
+### Wide method adj----
+methods <- c("lpdid_adj")
+results <- list()
+for (method in methods) {
+  cat("Benchmarking method:", method, "\n")
+  results[[method]] <- bench_method(
+    df = df,
+    method = method,
+    par_type_horizon = "wide",  # ou "long"
+    par_one_reg = FALSE,
+    min_iterations = 2
+  )
+}
+
+# Display results
+results_df_adj <- rbindlist(results, idcol = "method")
+print(results_df_adj[, .(method, median_time,  iterations)])
+
+results_df_adj$format <- "wide"
+results_df_adj$one_reg <- FALSE
+
+write.csv(results_df_adj[,-2],"bench_adj.csv",row.names = F)

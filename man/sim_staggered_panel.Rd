@@ -13,7 +13,7 @@ sim_staggered_panel(
   att_profile = c(-0.02, -0.03, -0.037, -0.039, -0.04),
   early_cutoff = 10L,
   early_multiplier = 2,
-  sigma_alpha = 0.3,
+  sigma_alpha = 0.2,
   p_female = 0.5,
   female_treat_rr = 2,
   male_growth = 0.02,
@@ -21,10 +21,10 @@ sim_staggered_panel(
   n_firms = 500L,
   firm_size_meanlog = 4,
   firm_size_sdlog = 1.2,
-  firm_fe_var_share = 0.1,
+  firm_fe_var_share = 0.05,
   p_move = 0.05,
   base_log_earnings = 10,
-  sigma_eps = 0.15,
+  sigma_eps = 0.1,
   seed = 1973L,
   verbose = TRUE
 )
@@ -58,7 +58,7 @@ are labelled "early" and receive a scaled-up ATT. Default: \code{10}.}
 applied to early cohorts. Default: \code{2.0}.}
 
 \item{sigma_alpha}{Numeric. Standard deviation of the individual fixed
-effect \eqn{\alpha_i}. Default: \code{0.30}.}
+effect \eqn{\alpha_i}. Default: \code{0.20}.}
 
 \item{p_female}{Numeric in (0, 1). Population share of women.
 Default: \code{0.50}.}
@@ -85,7 +85,7 @@ distribution. Larger values produce a fatter size tail. Default: \code{1.2}.}
 \item{firm_fe_var_share}{Numeric in (0, 1). Target share of total
 \code{log_earnings} variance attributable to firm fixed effects.
 The firm FE standard deviation is calibrated analytically to hit this
-target. Default: \code{0.10}.}
+target. Default: \code{0.05}.}
 
 \item{p_move}{Numeric in (0, 1). Per-period probability that a worker
 changes firm. The destination is drawn proportional to firm size (no
@@ -95,7 +95,7 @@ sorting on firm FEs). Default: \code{0.05}.}
 Default: \code{10.0}.}
 
 \item{sigma_eps}{Numeric. Standard deviation of the idiosyncratic iid
-shock \eqn{\varepsilon_{it}}. Default: \code{0.15}.}
+shock \eqn{\varepsilon_{it}}. Default: \code{0.1}.}
 
 \item{seed}{Integer or \code{NULL}. Passed to \code{\link{set.seed}}.
 Use \code{NULL} to skip seeding (e.g. inside a Monte Carlo loop that

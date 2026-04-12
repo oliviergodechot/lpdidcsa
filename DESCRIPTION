@@ -1,6 +1,6 @@
 Package: lpdidcsa
 Title: Local Projections DiD and Callaway-Sant'Anna Event Studies
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: c(person("Olivier", "Godechot", email = "olivier.godechot@sciencespo.fr", role = c("aut", "cre")), person("Ulysse", "Lojkine", role = "aut"))
 Description: The package implements the LP-DiD estimator of Dube, Girardi, Jordà & Taylor (2025) and a local-projection version of the Callaway & Sant'Anna (2021) estimator, with support for absorbing and non-absorbing treatments. It enables to run LP-DiD and reweighted LP-DiD with or without control variables, adjusted LP-DiD with control variables, inverse probability weighting LP-DiD, LP-CSA with or without control variables and inverse probability weighting LP-CSA.
 License: MIT + file LICENSE

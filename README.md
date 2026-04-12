@@ -52,19 +52,19 @@ Prepares the panel by computing treatment timing variables and creating leads/la
 
 ### Arguments
 
-| Argument       | Type                        | Default   | Description                            |
+| Argument | Type | Default | Description |
 |------------------|------------------|------------------|------------------|
-| `data`         | `data.frame` / `data.table` | —         | Input panel                            |
-| `unit`         | `character`                 | —         | Unit identifier column                 |
-| `time`         | `character`                 | `"year"`  | Time period column (integer-valued)    |
-| `dependent`    | `character`                 | —         | Outcome variable column                |
-| `treat`        | `character`                 | `"treat"` | Binary treatment indicator (0/1)       |
-| `absorbing`    | `logical`                   | `TRUE`    | Whether treatment is absorbing         |
-| `n_pre`        | `integer` / `NULL`          | `NULL`    | Pre-treatment periods (all if `NULL`)  |
-| `n_post`       | `integer` / `NULL`          | `NULL`    | Post-treatment periods (all if `NULL`) |
-| `p_variables`  | named `list`                | `list()`  | Horizon-specific variables             |
-| `h_variables`  | `character` / `NULL`        | `NULL`    | Variables carried at every horizon     |
-| `type_horizon` | `character`                 | `"wide"`  | `"wide"` or `"long"` output format     |
+| `data` | `data.frame` / `data.table` | — | Input panel |
+| `unit` | `character` | — | Unit identifier column |
+| `time` | `character` | `"year"` | Time period column (integer-valued) |
+| `dependent` | `character` | — | Outcome variable column |
+| `treat` | `character` | `"treat"` | Binary treatment indicator (0/1) |
+| `absorbing` | `logical` | `TRUE` | Whether treatment is absorbing |
+| `n_pre` | `integer` / `NULL` | `NULL` | Pre-treatment periods (all if `NULL`) |
+| `n_post` | `integer` / `NULL` | `NULL` | Post-treatment periods (all if `NULL`) |
+| `p_variables` | named `list` | `list()` | Horizon-specific variables |
+| `h_variables` | `character` / `NULL` | `NULL` | Variables carried at every horizon |
+| `type_horizon` | `character` | `"wide"` | `"wide"` or `"long"` output format |
 
 ### `p_variables` naming convention
 
@@ -80,14 +80,14 @@ p_variables <- list(
 
 ### Output columns added
 
-| Column                     | Description                                                               |
+| Column | Description |
 |------------------------------------|------------------------------------|
-| `first.treat`              | First treatment period per unit (`NA` for never-treated). Absorbing only. |
-| `last.treat`               | Most recent treatment period as of *t*. Non-absorbing only.               |
-| `next.treat`               | Next upcoming treatment period. Non-absorbing only.                       |
-| `dtreat`                   | Treatment change: *D_it − D_i,t−1*                                        |
-| `<dep>_tm2`, `<dep>_t0`, … | Outcome at each horizon (wide format)                                     |
-| `horizon`                  | Horizon integer *h = t′ − t* (long format)                                |
+| `first.treat` | First treatment period per unit (`NA` for never-treated). Absorbing only. |
+| `last.treat` | Most recent treatment period as of *t*. Non-absorbing only. |
+| `next.treat` | Next upcoming treatment period. Non-absorbing only. |
+| `dtreat` | Treatment change: *D_it − D_i,t−1* |
+| `<dep>_tm2`, `<dep>_t0`, … | Outcome at each horizon (wide format) |
+| `horizon` | Horizon integer *h = t′ − t* (long format) |
 
 ### Example
 
@@ -132,64 +132,65 @@ Estimates event study coefficients horizon by horizon (or in a single stacked re
 
 ### Arguments
 
-| Argument       | Type                        | Default       | Description                                                                                  |
+| Argument | Type | Default | Description |
 |------------------|------------------|------------------|------------------|
-| `data`         | `data.frame` / `data.table` | —             | Output of `lpdidcsa_data()`                                                                  |
-| `unit`         | `character`                 | —             | Unit identifier column                                                                       |
-| `time`         | `character`                 | `"year"`      | Time period column                                                                           |
-| `dependent`    | `character`                 | —             | Outcome variable column                                                                      |
-| `dtreat`       | `character`                 | `"dtreat"`    | Treatment change indicator column                                                            |
-| `n_pre`        | `integer` / `NULL`          | `NULL`        | Pre-treatment horizons (all if `NULL`)                                                       |
-| `n_post`       | `integer` / `NULL`          | `NULL`        | Post-treatment horizons (all if `NULL`)                                                      |
-| `controls`     | `character` / `NULL`        | `NULL`        | Control variables (fixest-style strings accepted)                                            |
-| `FE`           | `character` / `NULL`        | `NULL`        | Additional fixed effects                                                                     |
-| `clusters`     | `character`                 | `unit`        | Clustering column                                                                            |
-| `weight`       | `character` / `NULL`        | `NULL`        | Sampling weight column                                                                       |
-| `controls_h`   | `character` / `NULL`        | `NULL`        | Horizon-specific control variables                                                           |
-| `FE_h`         | `character` / `NULL`        | `NULL`        | Horizon-specific additional fixed effects                                                    |
-| `clusters_h`   | `character`                 | `unit`        | Horizon-specific clustering column                                                           |
-| `weight_h`     | `character` / `NULL`        | `NULL`        | Horizon-specific sampling weight column                                                      |
-| `meth`         | `character`                 | `"lpdid_ipw"` | Estimator (see table below)                                                                  |
-| `absorbing`    | `logical`                   | `TRUE`        | Absorbing treatment assumption                                                               |
-| `reentry`      | `integer` / `NULL`          | `NULL`        | Min. periods since last treatment for re-entry in the analysis (only when absorbing = FALSE) |
-| `type_horizon` | `character`                 | `"wide"`      | Format of the input data: `"wide"` or `"long"`                                               |
-| `horizon`      | `character`                 | `"horizon"`   | Horizon column name (long format only)                                                       |
-| `one_reg`      | `logical`                   | `FALSE`       | Run all horizons in one stacked regression (long format only)                                |
+| `data` | `data.frame` / `data.table` | — | Output of `lpdidcsa_data()` |
+| `unit` | `character` | — | Unit identifier column |
+| `time` | `character` | `"year"` | Time period column |
+| `dependent` | `character` | — | Outcome variable column |
+| `dtreat` | `character` | `"dtreat"` | Treatment change indicator column |
+| `n_pre` | `integer` / `NULL` | `NULL` | Pre-treatment horizons (all if `NULL`) |
+| `n_post` | `integer` / `NULL` | `NULL` | Post-treatment horizons (all if `NULL`) |
+| `controls` | `character` / `NULL` | `NULL` | Control variables (fixest-style strings accepted) |
+| `FE` | `character` / `NULL` | `NULL` | Additional fixed effects |
+| `clusters` | `character` | `unit` | Clustering column |
+| `weight` | `character` / `NULL` | `NULL` | Sampling weight column |
+| `controls_h` | `character` / `NULL` | `NULL` | Horizon-specific control variables |
+| `FE_h` | `character` / `NULL` | `NULL` | Horizon-specific additional fixed effects |
+| `clusters_h` | `character` | `unit` | Horizon-specific clustering column |
+| `weight_h` | `character` / `NULL` | `NULL` | Horizon-specific sampling weight column |
+| `meth` | `character` | `"lpdid_ipw"` | Estimator (see table below) |
+| `anticipation` | `integer` | `0` | Number of time periods ahead of the treatment where participants can anticipate the treatment and adapt their behavior |
+| `absorbing` | `logical` | `TRUE` | Absorbing treatment assumption |
+| `reentry` | `integer` / `NULL` | `NULL` | Min. periods since last treatment for re-entry in the analysis (only when absorbing = FALSE) |
+| `type_horizon` | `character` | `"wide"` | Format of the input data: `"wide"` or `"long"` |
+| `horizon` | `character` | `"horizon"` | Horizon column name (long format only) |
+| `one_reg` | `logical` | `FALSE` | Run all horizons in one stacked regression (long format only) |
 
 ### Estimators
 
 #### Without control variables
 
-| `meth`        | Description                                         | ATT type          |
+| `meth` | Description | ATT type |
 |------------------------|------------------------|------------------------|
-| `"lpdid"`     | LP-DiD                                              | Variance-weighted |
-| `"lpdid_rw"`  | Reweighted LP-DiD                                   | Equally-weighted  |
-| `"lpdid_adj"` | LP-DiD with adjusted regression (`avg_comparisons`) | Equally-weighted  |
-| `"lpcsa"`     | LP-CSA                                              | Equally-weighted  |
-| `"lpdid_ipw"` | runs `"lpdid_rw"`                                   | Equally-weighted  |
-| `"lpcsa_ipw"` | runs `"lpcsa"`                                      | Equally-weighted  |
+| `"lpdid"` | LP-DiD | Variance-weighted |
+| `"lpdid_rw"` | Reweighted LP-DiD | Equally-weighted |
+| `"lpdid_adj"` | LP-DiD with adjusted regression (`avg_comparisons`) | Equally-weighted |
+| `"lpcsa"` | LP-CSA | Equally-weighted |
+| `"lpdid_ipw"` | runs `"lpdid_rw"` | Equally-weighted |
+| `"lpcsa_ipw"` | runs `"lpcsa"` | Equally-weighted |
 
 #### With control variables
 
-| `meth`        | Description                                         | ATT type          | Hypothesis                                              |
+| `meth` | Description | ATT type | Hypothesis |
 |------------------|------------------|------------------|------------------|
-| `"lpdid"`     | LP-DiD with control variables                       | Variance-weighted | Treatment effects do not vary with values of covariates |
-| `"lpdid_rw"`  | Reweighted LP-DiD with control variables            | Equally-weighted  | Treatment effects do not vary with values of covariates |
-| `"lpdid_adj"` | LP-DiD with adjusted regression (`avg_comparisons`) | Equally-weighted  |                                                         |
-| `"lpdid_ipw"` | LP-DiD with inverse probability weighting           | Equally-weighted  |                                                         |
-| `"lpcsa"`     | LP-CSA with control variables                       | Equally-weighted  | Treatment effect do not vary with values of covariates  |
-| `"lpcsa_ipw"` | LP-CSA with inverse probability weighting           | Equally-weighted  |                                                         |
+| `"lpdid"` | LP-DiD with control variables | Variance-weighted | Treatment effects do not vary with values of covariates |
+| `"lpdid_rw"` | Reweighted LP-DiD with control variables | Equally-weighted | Treatment effects do not vary with values of covariates |
+| `"lpdid_adj"` | LP-DiD with adjusted regression (`avg_comparisons`) | Equally-weighted |  |
+| `"lpdid_ipw"` | LP-DiD with inverse probability weighting | Equally-weighted |  |
+| `"lpcsa"` | LP-CSA with control variables | Equally-weighted | Treatment effect do not vary with values of covariates |
+| `"lpcsa_ipw"` | LP-CSA with inverse probability weighting | Equally-weighted |  |
 
 ### Return value
 
 A named list with four elements:
 
-| Element   | Description                                                                                                  |
+| Element | Description |
 |------------------------------------|------------------------------------|
-| `est`     | Main results: `data.table` with columns `h`, `variable`, `estimate`, `se`, `T`, `pvalue`, `n_obs`, `formula` |
-| `est_det` | Cohort-level estimates (CSA and adjusted methods only)                                                       |
-| `ps`      | Propensity score estimates (IPW methods only)                                                                |
-| `plot`    | `ggplot2` event study plot with 95% confidence intervals                                                     |
+| `est` | Main results: `data.table` with columns `h`, `variable`, `estimate`, `se`, `T`, `pvalue`, `n_obs`, `formula` |
+| `est_det` | Cohort-level estimates (CSA and adjusted methods only) |
+| `ps` | Propensity score estimates (IPW methods only) |
+| `plot` | `ggplot2` event study plot with 95% confidence intervals |
 
 ### Example
 
@@ -252,7 +253,6 @@ res <- lpdidcsa(df_w,
 res$plot   # event study plot
 res$est    # coefficient table
 res$ps    # coefficient table for the first stage propensity score
-
 ```
 
 ------------------------------------------------------------------------

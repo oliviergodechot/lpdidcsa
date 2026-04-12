@@ -21,6 +21,7 @@ lpdidcsa(
   weight = NULL,
   weight_h = NULL,
   meth = "lpdid_ipw",
+  anticipation = 0,
   absorbing = TRUE,
   reentry = NULL,
   type_horizon = "wide",
@@ -48,39 +49,52 @@ If \code{NULL}, all available pre-periods are used.}
 \item{n_post}{Integer >= 0 or \code{NULL}. Number of post-treatment
 horizons. If \code{NULL}, all available post-periods are used.}
 
-\item{controls}{Character vector of control variable column names, or
+\item{controls}{Character vector of the column names for horizon-invariant control variable, or
 \code{NULL}. Accepts \code{fixest}-style formula strings (e.g.
-\code{"i(x)"}, \code{"s(x)"}).}
+\code{controls=c("i(var1) + log(var2_tm1)","var3_tm2")}).}
 
-\item{controls_h}{Character vector of control horizon-specific
-variable column names, needed or \code{NULL}. Does not accept \code{fixest}-style
-formula strings (e.g. \code{"i(x)"}, \code{"s(x)"}). Enter the initial variable
-name. The function adds the suffix (e.g. '_tm5',...,'_t5') if \code{type_horizon = "wide"}
-and the suffix '_th' if \code{type_horizon = "long"}.}
+\item{controls_h}{Character vector of the column names for horizon-variant control
+variables, or \code{NULL}. Does not accept \code{fixest}-style
+formula strings. Enter the initial variable names (e.g., \code{controls_h=c("var1","var2","var3")} ).
+The function adds the suffix (e.g. '_tm5',...,'_t5') if \code{type_horizon = "wide"} and
+the suffix '_th' if \code{type_horizon = "long"}.}
 
-\item{FE}{Character vector of additional fixed-effect column names, or
-\code{NULL}.}
+\item{FE}{Character vector of column names for high-dimensional horizon-invariant
+fixed-effect variables , or \code{NULL}. Accepts \code{fixest}-style
+FE formula strings (e.g., \code{FE=c("var1 + var2_tm1","var3_tm2^var4_tm2","var5") }).}
 
-\item{FE_h}{Character vector of additional horizon-specific fixed-effect column names, or
-\code{NULL}.}
+\item{FE_h}{Character vector of column names for for high-dimensional horizon-variant
+fixed-effect variables, or \code{NULL}. Enter the initial variable names (e.g.
+\code{FE_h=c("var1","var2")} ). Does not accept \code{fixest}-style FE formula strings.
+The function adds the suffix (e.g. '_tm5',...,'_t5') if \code{type_horizon = "wide"}
+and the suffix '_th' if \code{type_horizon = "long"}. The function
+adds the suffix (e.g. '_tm5',...,'_t5') if \code{type_horizon = "wide"} and the
+suffix '_th' if \code{type_horizon = "long"}.}
 
-\item{clusters}{Character. Column names used for clustering standard errors.
-Defaults to \code{unit}.}
+\item{clusters}{Character. Character vector of column names for horizon-invariant variables used for
+clustering standard errors (e.g. \code{clusters=c("var1","var2_tm1")} ). Defaults to \code{unit}.}
 
-\item{clusters_h}{Character vector of control horizon-specific variable column names, needed or
+\item{clusters_h}{Character vector of column names for horizon-variant variables
+used for clustering standard errors (e.g. \code{clusters_h=c("var1","var2")} ). Defaults to
 \code{NULL}. Enter the initial variable names. The function
 adds the suffix (e.g. '_tm5',...,'_t5') if \code{type_horizon = "wide"} and the
 suffix '_th' if \code{type_horizon = "long"}.}
 
-\item{weight}{Character. Column name for survey/sampling weights, or
-\code{NULL}.}
+\item{weight}{Character. Column name for horizon-invariant survey/sampling
+weight variable, or \code{NULL}.}
 
-\item{weight_h}{Character. Horizon-specific column name for survey/sampling
-weights, or \code{NULL}.}
+\item{weight_h}{Character. Column name for horizon-variant survey/sampling
+weight variable, or \code{NULL}. Enter the initial variable name. The function
+adds the suffix (e.g. '_tm5',...,'_t5') if \code{type_horizon = "wide"} and the
+suffix '_th' if \code{type_horizon = "long"}.}
 
 \item{meth}{Character. Estimator to use. One of \code{"lpdid"},
 \code{"lpdid_rw"}, \code{"lpdid_adj"}, \code{"lpdid_ipw"},
 \code{"lpcsa_ipw"}, \code{"lpcsa"} (default: \code{"lpdid_ipw"}).}
+
+\item{anticipation}{Integer. Number of time periods ahead of the treatment
+where participants can anticipate the treatment and adapt their behavior
+(default: \code{0L}).}
 
 \item{absorbing}{Logical. If \code{TRUE} (default), treatment is assumed
 absorbing and not-yet-treated units serve as controls. If \code{FALSE},
@@ -107,7 +121,7 @@ A named list with four elements:
 \describe{
 \item{\code{est}}{Main estimation results as a \code{data.table} with
 columns \code{h}, \code{variable}, \code{estimate}, \code{se},
-\code{T}, \code{pvalue}, \code{n_obs}, \code{formula}.}
+\code{T}, \code{pvalue}, \code{n_obs}, \code{formula}, \code{clusters}.}
 \item{\code{est_det}}{Cohort-level (disaggregated) estimates as a
 \code{data.table}. Non-\code{NULL} for CSA and adjusted methods
 only.}
