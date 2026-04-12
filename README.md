@@ -55,9 +55,9 @@ Prepares the panel by computing treatment timing variables and creating leads/la
 | Argument | Type | Default | Description |
 |------------------|------------------|------------------|------------------|
 | `data` | `data.frame` / `data.table` | — | Input panel |
-| `unit` | `character` | — | Unit identifier column |
-| `time` | `character` | `"year"` | Time period column (integer-valued) |
-| `dependent` | `character` | — | Outcome variable column |
+| `unit` | `character` | — | Unit identifier variable |
+| `time` | `character` | `"year"` | Time period variable (integer-valued) |
+| `dependent` | `character` | — | Outcome variable |
 | `treat` | `character` | `"treat"` | Binary treatment indicator (0/1) |
 | `absorbing` | `logical` | `TRUE` | Whether treatment is absorbing |
 | `n_pre` | `integer` / `NULL` | `NULL` | Pre-treatment periods (all if `NULL`) |
@@ -135,26 +135,26 @@ Estimates event study coefficients horizon by horizon (or in a single stacked re
 | Argument | Type | Default | Description |
 |------------------|------------------|------------------|------------------|
 | `data` | `data.frame` / `data.table` | — | Output of `lpdidcsa_data()` |
-| `unit` | `character` | — | Unit identifier column |
-| `time` | `character` | `"year"` | Time period column |
+| `unit` | `character` | — | Unit identifier variable |
+| `time` | `character` | `"year"` | Time period variable |
 | `dependent` | `character` | — | Outcome variable column |
-| `dtreat` | `character` | `"dtreat"` | Treatment change indicator column |
+| `dtreat` | `character` | `"dtreat"` | Treatment change indicator variable |
 | `n_pre` | `integer` / `NULL` | `NULL` | Pre-treatment horizons (all if `NULL`) |
 | `n_post` | `integer` / `NULL` | `NULL` | Post-treatment horizons (all if `NULL`) |
-| `controls` | `character` / `NULL` | `NULL` | Control variables (fixest-style strings accepted) |
-| `FE` | `character` / `NULL` | `NULL` | Additional fixed effects |
-| `clusters` | `character` | `unit` | Clustering column |
-| `weight` | `character` / `NULL` | `NULL` | Sampling weight column |
-| `controls_h` | `character` / `NULL` | `NULL` | Horizon-specific control variables |
-| `FE_h` | `character` / `NULL` | `NULL` | Horizon-specific additional fixed effects |
-| `clusters_h` | `character` | `unit` | Horizon-specific clustering column |
-| `weight_h` | `character` / `NULL` | `NULL` | Horizon-specific sampling weight column |
+| `controls` | `character` / `NULL` | `NULL` | Horizon-invariant control variables (fixest-style strings accepted) |
+| `FE` | `character` / `NULL` | `NULL` | Horizon-invariant fixed effects |
+| `clusters` | `character` | `unit` | Horizon-invariant clustering variables |
+| `weight` | `character` / `NULL` | `NULL` | Horizon-invariant sampling weight variable |
+| `controls_h` | `character` / `NULL` | `NULL` | Horizon-variant control variables |
+| `FE_h` | `character` / `NULL` | `NULL` | Horizon-variant fixed effects |
+| `clusters_h` | `character` | `unit` | Horizon-variant clustering variables |
+| `weight_h` | `character` / `NULL` | `NULL` | Horizon-variant sampling weight variable |
 | `meth` | `character` | `"lpdid_ipw"` | Estimator (see table below) |
 | `anticipation` | `integer` | `0` | Number of time periods ahead of the treatment where participants can anticipate the treatment and adapt their behavior |
 | `absorbing` | `logical` | `TRUE` | Absorbing treatment assumption |
 | `reentry` | `integer` / `NULL` | `NULL` | Min. periods since last treatment for re-entry in the analysis (only when absorbing = FALSE) |
 | `type_horizon` | `character` | `"wide"` | Format of the input data: `"wide"` or `"long"` |
-| `horizon` | `character` | `"horizon"` | Horizon column name (long format only) |
+| `horizon` | `character` | `"horizon"` | Horizon variable name (long format only) |
 | `one_reg` | `logical` | `FALSE` | Run all horizons in one stacked regression (long format only) |
 
 ### Estimators
@@ -187,7 +187,7 @@ A named list with four elements:
 
 | Element | Description |
 |------------------------------------|------------------------------------|
-| `est` | Main results: `data.table` with columns `h`, `variable`, `estimate`, `se`, `T`, `pvalue`, `n_obs`, `formula` |
+| `est` | Main results: `data.table` with columns `h`, `variable`, `estimate`, `se`, `T`, `pvalue`, `n_obs`,  `n_treat`,  `n_ctrl`, `formula`, `clusters` |
 | `est_det` | Cohort-level estimates (CSA and adjusted methods only) |
 | `ps` | Propensity score estimates (IPW methods only) |
 | `plot` | `ggplot2` event study plot with 95% confidence intervals |
@@ -260,7 +260,6 @@ res$ps    # coefficient table for the first stage propensity score
 ## Notes
 
 -   `n_pre` and `n_post` are capped at the maximum lags/leads available in the data in both functions.
--   Horizon **−1** is the reference period and is always normalised to zero in the plot.
 -   `lpdid_adj` is the slowest method as it calls `avg_comparisons()` for each horizon.
 
 ------------------------------------------------------------------------
