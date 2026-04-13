@@ -416,6 +416,7 @@ lpdidcsa <- function(data,
       formula  = formula_str,
       clusters = attr(model$coeftable,"vcov_type")
     )
+    out[,clusters:=gsub("Clustered ","",clusters)]
     setnames(out, c("h", "variable", "estimate", "se", "T", "pvalue",
                     "n_obs", "formula","clusters"))
     out
@@ -430,6 +431,7 @@ lpdidcsa <- function(data,
       formula  = formula_str,
       clusters = attr(model$coeftable,"vcov_type")
     )
+    out[,clusters:=gsub("Clustered ","",clusters)]
     h_part <- ifelse(
       regexpr(paste0(col_horizon,"::"), out$variable) > 0,
       substr(out$variable,
@@ -573,6 +575,10 @@ lpdidcsa <- function(data,
     }
     dt <- data.frame(dt, n_t)
     setcolorder(dt,c("n_treat","n_ctrl"),before="formula")
+    if (!is.null(col_weight)){
+      setcolorder(dt,c("sw_treat","sw_ctrl"),before="formula")
+      dt[,weight:=col_weight]
+      }
     dt
   }
   
@@ -595,6 +601,11 @@ lpdidcsa <- function(data,
     
     dt <- merge(dt, n_t, by.x = c("h"), by.y = c(col_horizon), all.x=T)
     setcolorder(dt,c("n_treat","n_ctrl"),before="formula")
+    if (!is.null(col_weight)){
+      setcolorder(dt,c("sw_treat","sw_ctrl"),before="formula")
+      dt[,weight:=col_weight]
+      }
+    
     dt
     
   }
@@ -629,6 +640,11 @@ lpdidcsa <- function(data,
     
     dt <- merge(dt, n_t, by = col_time, all.x=T)
     setcolorder(dt,c("n_treat","n_ctrl"),before="formula")
+    if (!is.null(col_weight)){
+      setcolorder(dt,c("sw_treat","sw_ctrl"),before="formula")
+      dt[,weight:=col_weight]
+      }
+    
     dt <- dt[order(get(col_time),h),]
     dt
   }
@@ -662,6 +678,10 @@ lpdidcsa <- function(data,
     
     dt <- merge(dt, n_t, by.x = c(col_time,"h"), by.y = c(col_time,col_horizon), all.x=T)
     setcolorder(dt,c("n_treat","n_ctrl"),before="formula")
+    if (!is.null(col_weight)){
+      setcolorder(dt,c("sw_treat","sw_ctrl"),before="formula")
+      dt[,weight:=col_weight]
+      }
     dt <- dt[order(get(col_time),h),]
     dt
     
@@ -1035,7 +1055,7 @@ lpdidcsa <- function(data,
             paste0(col_dtreat, " ~ i(", col_time, ")")
           }
         
-        print(formula_ps)
+        
         ps_mod       <- fit_feglm(formula_ps, clean_df, col_weight)
         ps_list[[i]] <- export_coeftable(ps_mod, h, formula_ps)
         
@@ -1055,7 +1075,7 @@ lpdidcsa <- function(data,
                      weights = clean_df$rewgt_h,
                      data    = clean_df)
         
-        est <- export_coeftable(mod, h, formula)
+        est <- export_coeftable(mod, h, paste0(formula_reg))
         
         est_list[[i]] <- add_meta(est,clean_df)
         
