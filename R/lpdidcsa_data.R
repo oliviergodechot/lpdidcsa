@@ -131,11 +131,19 @@ lpdidcsa_data <- function(data,
     is.character(time)      && length(time)      == 1,
     is.character(dependent) && length(dependent) == 1,
     is.character(treat)     && length(treat)     == 1,
-    is.list(p_variables)
+    is.list(p_variables),
+    is.null(h_variables) || is.character(h_variables),
+    type_horizon %in% c("wide", "long")
   )
   
+  if (length(p_variables) > 0 &&
+      (is.null(names(p_variables)) ||
+       !all(grepl("^(t|tm)[0-9]+$", names(p_variables))))) {
+    stop("'p_variables' must be a named list with names such as 't0', 't1', 'tm1', 'tm2'.")
+  }
+  
   required_cols <- c(unit, time, dependent, treat,
-                     unlist(p_variables, use.names = FALSE))
+                     unlist(p_variables, use.names = FALSE), h_variables)
   
   missing_cols  <- setdiff(required_cols, names(data))
   
@@ -152,13 +160,33 @@ lpdidcsa_data <- function(data,
   }
   
   # Return p_variables for horizon h, or NULL if not specified
+  # (h = 0 -> "t0"; "tm0" is also accepted for backward compatibility)
   p_variables_at <- function(h) {
-    key <- if (h <= 0) {paste0("tm", abs(h))} else {paste0("t", h)}
+    if (h == 0) return(unique(c(p_variables[["t0"]], p_variables[["tm0"]])))
+    key <- if (h < 0) paste0("tm", abs(h)) else paste0("t", h)
     p_variables[[key]]
   }
   
+  # Add columns <cols><suffix> shifted by h within unit (lag if h < 0,
+  # lead if h > 0, plain copy if h = 0). Does nothing if 'cols' is empty.
+  # 'cols' is de-duplicated: duplicated LHS names in := are handled
+  # differently (error / silent misassignment) across data.table versions.
+  add_shifted <- function(dt, cols, h, suffix) {
+    cols <- unique(cols)
+    if (length(cols) == 0) return(invisible(dt))
+    new_cols <- paste0(cols, suffix)
+    if (h == 0) {
+      dt[, (new_cols) := .SD, .SDcols = cols]
+    } else {
+      dt[, (new_cols) := shift(.SD, n = abs(h),
+                               type = if (h < 0) "lag" else "lead"),
+         .SDcols = cols, by = c(col_unit)]
+    }
+    invisible(dt)
+  }
+  
   # ── Setup ──────────────────────────────────────────────────────────────────
-  df <- copy(setDT(data))
+  df <- as.data.table(data)   # copy: the user's object is left untouched
   
   col_unit     <- unit
   col_time     <- time
@@ -170,18 +198,18 @@ lpdidcsa_data <- function(data,
   col_trt_tm1  <- paste0(col_trt,  "_tm1")
   col_dep_tm1  <- paste0(col_dep,  "_tm1")
   
-  setorderv(data, c(col_unit, col_time))
+  setorderv(df, c(col_unit, col_time))
   
   # ── 1. Treatment timing variables ──────────────────────────────────────────
   if (absorbing == TRUE)
   {
     # First treatment period per unit (NA for never-treated)
-    df[, first.treat := min(get(col_time) * fifelse(get(col_trt) == 0, NA, 1),
-                            na.rm = TRUE),
-       by = list(get(col_unit))]
-    df[, first.treat := fifelse(is.infinite(first.treat), NA, first.treat)]
+    df[, first.treat := {
+      tt <- get(col_time)[get(col_trt) == 1]
+      if (length(tt) > 0) as.numeric(min(tt)) else NA_real_
+    }, by = c(col_unit)]
     
-    df[, time2treat  := fifelse(is.na(first.treat), NA, get(col_time) - first.treat)]
+    df[, time2treat  := fifelse(is.na(first.treat), NA_real_, get(col_time) - first.treat)]
     
     # # Last treatment period: most recent t at which treatment switched on
     # df[, last.treat := fifelse(shift(get(col_time), type = "lag") == first.treat,
@@ -207,14 +235,14 @@ lpdidcsa_data <- function(data,
                                shift(get(col_time), type = "lag"), NA_real_),
        by = list(get(col_unit))]
     df[, last.treat := nafill(last.treat, type = "locf"), by = list(get(col_unit))]
-    df[, time2lasttreat  := fifelse(is.na(last.treat), NA,
+    df[, time2lasttreat  := fifelse(is.na(last.treat), NA_real_,
                                     get(col_time) - last.treat)]
     
     df[, next.treat := fifelse(shift(get(col_trt), type = "lead") == 1,
                                shift(get(col_time), type = "lead"), NA_real_),
        by = list(get(col_unit))]
     df[, next.treat := nafill(next.treat, type = "nocb"), by = list(get(col_unit))]
-    df[, time2nexttreat  := fifelse(is.na(next.treat), NA,
+    df[, time2nexttreat  := fifelse(is.na(next.treat), NA_real_,
                                     get(col_time) - next.treat)]
     
     max_n_post <- df[, max(time2lasttreat, na.rm = TRUE)]
@@ -238,7 +266,8 @@ lpdidcsa_data <- function(data,
     n_pre <- max_n_pre
   }
   
-  df[, c("time2treat", "time2nexttreat", "time2lasttreat") := NULL]
+  tmp_cols <- intersect(c("time2treat", "time2nexttreat", "time2lasttreat"), names(df))
+  if (length(tmp_cols) > 0) df[, (tmp_cols) := NULL]
   
   # ── 2. Completing for missing years ───────────────────────────────────────
   
@@ -274,7 +303,7 @@ lpdidcsa_data <- function(data,
     df <- rbind(df[incomplete==0],df_in2)
     setorderv(df, cols=c(col_unit,col_time))
     
-    rm(df_in,df_com,df_in2)
+    rm(df_in, df_comp, df_in2)
     df[,incomplete:=NULL]
   }
   
@@ -285,14 +314,9 @@ lpdidcsa_data <- function(data,
   {
     # 3.1 Merge the t-1 slice: used to compute dtreat and to attach
     #     reference-period p_variables
-    cols_tm1   <- c(col_trt, col_dep,
-                    p_variables_at(-1), col_h_variables)
-    h <- -1
-    
-    df[, paste0(cols_tm1, "_tm1") := shift(.SD, n = abs(h), 
-                                           type = ifelse(h < 0, "lag", "lead")),
-       .SDcols = cols_tm1,
-       by = col_unit]
+    cols_tm1   <- unique(c(col_trt, col_dep,
+                           p_variables_at(-1), col_h_variables))
+    add_shifted(df, cols_tm1, -1, "_tm1")
     
     # 3.2 Treatment change indicator: 1 if unit switches from 0 to 1
     col_trt_tm1 <- paste0(col_trt, "_tm1")
@@ -310,10 +334,7 @@ lpdidcsa_data <- function(data,
       cols_h  <- unique(c(col_dep, p_var, col_h_variables))
       suffix <- horizon_suffix(h)
       
-      df[, paste0(cols_h, suffix) := shift(.SD, n = abs(h), 
-                                           type = ifelse(h < 0, "lag", "lead")),
-         .SDcols = cols_h,
-         by = col_unit]
+      add_shifted(df, cols_h, h, suffix)
       
     }
     
@@ -329,29 +350,16 @@ lpdidcsa_data <- function(data,
     # 4.1 Merge the t-1 slice for dtreat and reference-period p_variables
     cols_tm1   <- unique(c(col_dep, col_trt,
                            p_variables_at(-1), h_variables))
-    h <- -1
-    
-    df[, paste0(cols_tm1, "_tm1") := shift(.SD, n = abs(h), 
-                                           type = ifelse(h < 0, "lag", "lead")),
-       .SDcols = cols_tm1,
-       by = col_unit]
+    add_shifted(df, cols_tm1, -1, "_tm1")
     
     # 4.2 Wide merge: attach horizon-specific p_variables (all horizons != -1)
     w_th <- as.numeric(gsub("t", "", gsub("tm", "-", names(p_variables))))
-    w_th <- w_th[w_th != -1]
+    w_th <- unique(w_th[w_th != -1])
     
     if (length(w_th) > 0) {
       for (i in seq_along(w_th)) {
-        cols_th   <- unique(c(p_variables_at(w_th[i])))
         h <- w_th[i]
-        
-        suffix <- paste0("_t",gsub("-", "m", w_th[i]))
-        
-        df[, paste0(cols_th, suffix) := shift(.SD, n = abs(h), 
-                                              type = ifelse(h < 0, "lag", "lead")),
-           .SDcols = cols_th,
-           by = col_unit]
-        
+        add_shifted(df, p_variables_at(h), h, horizon_suffix(h))
       }
     }
     
@@ -368,7 +376,7 @@ lpdidcsa_data <- function(data,
     )
     
     # Prepare the horizon-side table (outcome and h_variables at each period)
-    cols_th  <- c(col_unit, col_time, col_dep, h_variables)
+    cols_th  <- unique(c(col_unit, col_time, col_dep, h_variables))
     cols_th  <- intersect(cols_th, names(df))
     df_th    <- df[, ..cols_th]
     setnames(df_th,

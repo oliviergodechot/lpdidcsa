@@ -26,7 +26,11 @@ lpdidcsa(
   reentry = NULL,
   type_horizon = "wide",
   horizon = "horizon",
-  one_reg = FALSE
+  one_reg = FALSE,
+  se_correction = TRUE,
+  se_correction_rw_ipw = FALSE,
+  ps_trim = 0.995,
+  time_x_controls = FALSE
 )
 }
 \arguments{
@@ -89,7 +93,7 @@ adds the suffix (e.g. '_tm5',...,'_t5') if \code{type_horizon = "wide"} and the
 suffix '_th' if \code{type_horizon = "long"}.}
 
 \item{meth}{Character. Estimator to use. One of \code{"lpdid"},
-\code{"lpdid_rw"}, \code{"lpdid_adj"}, \code{"lpdid_ipw"},
+\code{"lpdid_rw"}, \code{"lpdid_adj"}, \code{"lpdid_dr"}, \code{"lpdid_ipw"},
 \code{"lpcsa_ipw"}, \code{"lpcsa"} (default: \code{"lpdid_ipw"}).}
 
 \item{anticipation}{Integer. Number of time periods ahead of the treatment
@@ -114,26 +118,94 @@ set as a control unit or for a new treatment.
 
 \item{one_reg}{Logical. If \code{TRUE} and \code{type_horizon = "long"},
 runs all horizons in a single stacked regression instead of one per
-horizon (default: \code{FALSE}).}
+horizon (default: \code{FALSE}). Not supported for \code{meth = "lpdid_dr"},
+and no longer supported for \code{meth = "lpdid_adj"} (see Details).}
+
+\item{se_correction}{Logical. If \code{TRUE} (default) and
+\code{meth \%in\% c("lpdid_adj","lpdid_dr")}, computes a corrected
+standard error (\code{se_correct} column) via a cluster-level combined
+influence function, in addition to the naive standard error
+(\code{se} column). The correction propagates the estimation
+uncertainty of the first-stage nuisance model(s) (outcome regression
+for RA; outcome regression and propensity score for DR) into the final
+ATT's standard error, and has been validated to reproduce
+\code{lpdid.ado}'s \code{listreg}-based RA standard error exactly on a
+test panel. If \code{FALSE}, only the naive standard error is computed,
+which is faster on large datasets since it skips the additional
+\code{sandwich::estfun()}/\code{bread()} calls (no extra model refits
+are involved either way). Ignored for all other methods.}
+
+\item{se_correction_rw_ipw}{Logical. If \code{TRUE} and
+\code{meth \%in\% c("lpdid_rw","lpdid_ipw")} (with \code{one_reg = FALSE}),
+adds a \code{se_correct} column whose standard error propagates the
+estimation uncertainty of the reweighting stage (the per-period treated
+shares behind \code{rewgt_h}) and, for \code{"lpdid_ipw"}, of the
+propensity-score logit, via a cluster-level combined influence function
+(see Details). Default \code{FALSE}: the correction is usually small and
+requires extra \code{estfun()}/\code{bread()}/\code{model.matrix()} calls.
+Ignored for all other methods and for \code{one_reg = TRUE}.}
+
+\item{ps_trim}{Numeric in (0, 1]. Control observations whose estimated
+propensity score is \code{>= ps_trim} are dropped before weighting
+(treated observations are always kept). Applies to \code{"lpdid_ipw"},
+\code{"lpcsa_ipw"} and \code{"lpdid_dr"} (default: \code{0.995});
+\code{ps_trim = 1} disables trimming.}
+
+\item{time_x_controls}{Logical. If \code{TRUE}, the effect of every
+control is allowed to vary by period and every absorbed fixed effect is
+interacted with time (\code{FE^time}) in the regressions where controls
+enter: the final regression for \code{"lpdid"}, \code{"lpdid_rw"} and
+\code{"lpcsa"}; the control-group outcome regression for
+\code{"lpdid_adj"} and \code{"lpdid_dr"}; the propensity-score logit for
+\code{"lpdid_ipw"}, \code{"lpcsa_ipw"} and \code{"lpdid_dr"}. Controls
+are interacted with \code{factor(time)} using base-R formula operators,
+so compound terms (\code{log(x)}, \code{a*b}, \code{poly(x, 2)},
+\code{factor(v)}) are interacted as a whole: the RHS becomes
+\code{factor(time)*(controls)} when time is not otherwise in the model
+(PS logit, outcome regression without \code{FE}), and
+\code{(controls) + factor(time):(controls)} when time is absorbed (final
+regressions, or any regression with \code{FE}). Factor controls written
+\code{i(var)} are rewritten as \code{factor(var)}; \code{i()} terms with
+further arguments are not accepted (use \code{factor()}). The
+interaction is only added when the estimation sample of that regression
+contains at least two periods; otherwise the controls enter
+uninteracted. Note that a unit-level FE interacted with time is an
+observation-level FE in a per-horizon regression. With this option the
+generated formulas contain no fixest \code{i()} term (mixing \code{i()}
+with base-R \code{factor()} or \code{:} terms fails when fixest is not
+attached), so the treatment coefficient is named \code{dtreat} instead
+of \code{dtreat::1}, and the \code{"lpcsa"} cohort coefficients
+\code{dtreat:factor(year)2004} instead of \code{dtreat::1:year::2004}.
+Only for \code{one_reg = FALSE} (default: \code{FALSE}).}
 }
 \value{
-A named list with four elements:
+A named list with five elements:
 \describe{
 \item{\code{est}}{Main estimation results as a \code{data.table} with
 columns \code{h}, \code{variable}, \code{estimate}, \code{se},
-\code{T}, \code{pvalue}, \code{n_obs}, \code{formula}, \code{clusters}.}
+\code{T}, \code{pvalue}, \code{n_obs}, \code{formula}, \code{clusters},
+and, for \code{meth \%in\% c("lpdid_adj","lpdid_dr")} (and for
+\code{"lpdid_rw"}/\code{"lpdid_ipw"} when
+\code{se_correction_rw_ipw = TRUE}), \code{se_correct}. The
+\code{formula} column is the final-stage regression; for
+\code{"lpdid_adj"} and \code{"lpdid_dr"} the first-stage formulas
+are in \code{or} and \code{ps}.}
 \item{\code{est_det}}{Cohort-level (disaggregated) estimates as a
-\code{data.table}. Non-\code{NULL} for CSA and adjusted methods
-only.}
+\code{data.table}. Non-\code{NULL} for CSA methods only.}
 \item{\code{ps}}{Propensity score model estimates as a
-\code{data.table}. Non-\code{NULL} for IPW methods only.}
+\code{data.table}. Non-\code{NULL} for IPW and DR methods only.}
+\item{\code{or}}{First-step outcome regression on the control group
+(one per horizon) as a \code{data.table}, in the same format as
+\code{ps}. Non-\code{NULL} for \code{"lpdid_adj"} and
+\code{"lpdid_dr"} only.}
 \item{\code{plot}}{A \code{ggplot2} event study plot with 95\\%
-confidence intervals.}
+confidence intervals, built from \code{se_correct} where it has
+been computed and from the naive \code{se} otherwise.}
 }
 }
 \description{
 Estimates event study coefficients using Local Projections
-Difference-in-Differences (LP-DiD). Six estimators are supported:
+Difference-in-Differences (LP-DiD). Seven estimators are supported:
 }
 \details{
 \describe{
@@ -143,8 +215,13 @@ vary with the value of covariates.}
 \item{\code{"lpdid_rw"}}{Reweighted LP-DiD with control variables.
 Yields an equally-weighted ATT under the hypothesis that treatment effects do not
 vary with the value of covariates.}
-\item{\code{"lpdid_adj"}}{LP-DiD with adjusted regression via
-\code{avg_comparisons}. Yields an equally-weighted ATT (slower).}
+\item{\code{"lpdid_adj"}}{LP-DiD with regression adjustment (RA), via a
+control-only outcome regression and a cluster-level combined
+influence-function standard error. Yields an equally-weighted ATT.}
+\item{\code{"lpdid_dr"}}{LP-DiD doubly robust (RA + IPW combined), via
+an AIPW-style score and a cluster-level combined influence-function
+standard error. Yields an equally-weighted ATT. \code{one_reg = TRUE}
+is not implemented for this method.}
 \item{\code{"lpdid_ipw"}}{LP-DiD with inverse probability weighting.
 Yields an equally-weighted ATT.}
 \item{\code{"lpcsa"}}{LP-CSA with control variables. Yields an
@@ -153,6 +230,61 @@ vary with the value of covariates.}
 \item{\code{"lpcsa_ipw"}}{LP-CSA with inverse probability weighting
 (local-projection version of Callaway & Sant'Anna).}
 }
+
+As of this version, \code{meth = "lpdid_adj"} uses a control-only outcome
+regression (fit on untreated observations) plus a cluster-level combined
+influence function for its standard error, replacing the previous
+\code{marginaleffects::avg_comparisons()}-based implementation. This
+correctly accounts for the cross-cluster covariance between the
+control-fitting stage and the treated-outcome stage, which a naive
+additive \code{V_naive + V_extra} formula would omit whenever the same
+cluster (e.g. the same unit) contributes both a clean-control observation
+and its own treated observation within a horizon's estimation sample --
+the typical case in a staggered-adoption panel. \code{one_reg = TRUE} is
+no longer supported for \code{"lpdid_adj"}, since the corresponding
+influence-function derivation for the stacked one-regression case has not
+been validated; use \code{one_reg = FALSE}.
+
+\code{meth = "lpdid_dr"} combines this same outcome regression with an
+inverse-probability-weighted control-arm and treated-arm score (an
+AIPW-style estimator), together with a combined influence function that
+propagates uncertainty from both the outcome regression and the
+propensity-score model. It is only implemented for \code{one_reg = FALSE}.
+
+In both cases, if \code{FE} is supplied (fixed effects absorbed via
+\code{fixest}'s \code{|} syntax) in the outcome-regression formula, the
+standard-error correction is a partial correction only: the absorbed
+fixed effects' own sampling uncertainty is not propagated, since
+\code{fixest}'s \code{coef()} for an absorbed-FE model excludes them.
+Clustering for the correction uses only the first element of
+\code{clusters} (or \code{unit} if \code{clusters} is \code{NULL}); no
+multi-way clustering is supported by the correction itself, matching the
+single-cluster-variable limitation of \code{lpdid.ado} that this
+correction was validated against.
+
+\code{meth \%in\% c("lpdid_rw","lpdid_ipw")}: the final WLS uses weights
+\eqn{w_i = b_i / (1 - q_{t(i)})} (up to a global constant, which does not
+affect the estimate), where \eqn{q_t} is the \eqn{b}-weighted share of
+treated observations in period \eqn{t} and \eqn{b_i} is the survey weight
+(\code{"lpdid_rw"}) or the survey weight times the ATT-IPW weight
+(1 for treated, \eqn{\hat p/(1-\hat p)} for controls; \code{"lpdid_ipw"}).
+The naive \code{se} treats \eqn{w_i} as known. With
+\code{se_correction_rw_ipw = TRUE}, \code{se_correct} adds to each
+observation's WLS score \eqn{s_i} the first-order effect of estimating
+the nuisance parameters: \eqn{G_t\, b_j (D_j - q_t)/\sum_{t} b} with
+\eqn{G_t = \sum_{i \in t} s_i / (1-q_t)} for the period shares, and, for
+IPW, \eqn{J\, \mathrm{IF}_\gamma(j)} for the logit coefficients, where
+\eqn{J = \partial \sum_i s_i / \partial \gamma} (through both the control
+odds \eqn{e^{x'\gamma}} and the shares \eqn{q_t}). The combined terms are
+summed by cluster and passed through the WLS inverse Hessian. To keep
+\code{fixest}'s small-sample adjustment, \code{se_correct} is reported as
+\code{se * sqrt(V_corrected / V_uncorrected)}, both variances being
+computed with the same raw cluster-sum formula (the uncorrected one
+reproduces \code{fixest}'s clustered SE up to that adjustment). Trimming
+is treated as fixed. The same partial-correction caveats apply for
+absorbed \code{FE} in the PS model; in the PS, time now enters as explicit
+dummies (\code{i(time)}) rather than an absorbed fixed effect, so that its
+uncertainty is propagated (identical point estimates).
 }
 \examples{
 \donttest{
@@ -162,11 +294,11 @@ data(mpdta_r, package = "lpdidcsa")
 suppressWarnings({df  <- lpdidcsa_data(mpdta_r, unit = "countyreal", time = "year",
                      dependent = "lemp", treat = "treat")})
 
-                     
+
 # 1. Estimation with lpdid_rw and no covariates
 res <- lpdidcsa(df, unit = "countyreal", time = "year",
                 dependent = "lemp", meth = "lpdid_rw")
-                
+
 # Horizon estimates
 print(res$plot)
 print(res$est)
@@ -175,7 +307,7 @@ print(res$est)
 # 2. Estimation with lpcsa and no covariates
 res <- lpdidcsa(df, unit = "countyreal", time = "year",
                 dependent = "lemp", meth = "lpcsa")
-                
+
 # Horizon estimates
 print(res$plot)
 print(res$est)
@@ -184,7 +316,7 @@ print(res$est)
 print(res$est_det)
 
 
-# 3. Estimation with lpdid_ipw and covariates                    
+# 3. Estimation with lpdid_ipw and covariates
 res <- lpdidcsa(df, unit = "countyreal", time = "year",
                 dependent = "lemp", meth = "lpdid_ipw",controls="lpop")
 
@@ -209,6 +341,33 @@ print(res$est_det)
 # First stage propensity score estimates
 print(res$ps)
 
+# 5. Estimation with lpdid_adj (regression adjustment) and covariates,
+#    with the corrected standard error
+res <- lpdidcsa(df, unit = "countyreal", time = "year",
+                dependent = "lemp", meth = "lpdid_adj", controls = "lpop")
+print(res$est)   # includes both se (naive) and se_correct
+print(res$or)    # first-step outcome regression on the control group
+
+# 6. Same, but skipping the SE correction for speed on large data
+res <- lpdidcsa(df, unit = "countyreal", time = "year",
+                dependent = "lemp", meth = "lpdid_adj", controls = "lpop",
+                se_correction = FALSE)
+print(res$est)   # se_correct is NA
+
+# 7. Estimation with lpdid_dr (doubly robust) and covariates
+res <- lpdidcsa(df, unit = "countyreal", time = "year",
+                dependent = "lemp", meth = "lpdid_dr", controls = "lpop")
+print(res$est)
+print(res$ps)
+print(res$or)
+
+# 8. Same, with covariate effects allowed to vary by period
+res <- lpdidcsa(df, unit = "countyreal", time = "year",
+                dependent = "lemp", meth = "lpdid_dr", controls = "lpop",
+                time_x_controls = TRUE)
+print(res$ps)    # dtreat ~ factor(year)*(lpop)
+print(res$or)
+
 }
 
 }
@@ -220,4 +379,8 @@ A local projections approach to difference-in-differences.
 Callaway, B., & Sant'Anna, P. H. C. (2021).
 Difference-in-differences with multiple time periods.
 \emph{Journal of Econometrics}, 225(2), 200-230.
+
+Sant'Anna, P. H. C., & Zhao, J. (2020).
+Doubly robust difference-in-differences estimators.
+\emph{Journal of Econometrics}, 219(1), 101-122.
 }
