@@ -1,11 +1,26 @@
 Package: lpdidcsa
 Title: Local Projections DiD and Callaway-Sant'Anna Event Studies
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: c(person("Olivier", "Godechot", email = "olivier.godechot@sciencespo.fr", role = c("aut", "cre")), person("Ulysse", "Lojkine", role = "aut"))
-Description: The package implements the LP-DiD estimator of Dube, Girardi, Jordà & Taylor (2025) and a local-projection version of the Callaway & Sant'Anna (2021) estimator, with support for absorbing and non-absorbing treatments. It enables to run LP-DiD and reweighted LP-DiD with or without control variables, adjusted LP-DiD with control variables, inverse probability weighting LP-DiD, LP-CSA with or without control variables and inverse probability weighting LP-CSA.
+Description: Implements the local projections difference-in-differences
+    (LP-DiD) estimator of Dube, Girardi, Jordà & Taylor (2025) and a
+    local-projection version of the Callaway & Sant'Anna (2021)
+    <doi:10.1016/j.jeconom.2020.12.001> estimator (LP-CSA), for absorbing and
+    non-absorbing treatments, comparing treated observations with clean
+    (never-treated or not-yet-treated) controls at each horizon. Seven
+    estimators are available: LP-DiD, which yields a variance-weighted average
+    of cohort-specific effects; reweighted LP-DiD and LP-CSA, which yield the
+    equally-weighted average treatment effect on the treated (ATT) under
+    effects that do not vary with covariates; and LP-DiD with regression
+    adjustment, inverse probability weighting LP-DiD and LP-CSA, and doubly
+    robust LP-DiD following Sant'Anna & Zhao (2020)
+    <doi:10.1016/j.jeconom.2020.06.003>, which allow effects to vary with
+    covariates. Standard errors can account for the estimation of first-stage
+    models through cluster-level influence functions. The package also returns
+    predicted outcome paths of the treated with and without treatment.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
-Imports: data.table, fixest, ggplot2, marginaleffects
+Imports: data.table, fixest, ggplot2, sandwich
 Suggests: did

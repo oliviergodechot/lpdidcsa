@@ -144,8 +144,18 @@
 #'   of \code{dtreat::1}, and the \code{"lpcsa"} cohort coefficients
 #'   \code{dtreat:factor(year)2004} instead of \code{dtreat::1:year::2004}.
 #'   Only for \code{one_reg = FALSE} (default: \code{FALSE}).
+#' @param prediction Logical. If \code{TRUE}, computes, at each horizon, the
+#'   predicted outcome change (relative to the reference period) of the
+#'   treated with and without treatment, stores them in \code{pred}, and
+#'   draws three figures in \code{pred_plot}: changes without anchor, levels
+#'   on a common anchor, and levels on group-specific anchors (see Details).
+#'   Only for \code{one_reg = FALSE} (default: \code{FALSE}).
+#' @param prediction_se Logical. If \code{TRUE}, also computes cluster-robust
+#'   standard errors of the predictions and adds 95\% confidence intervals to
+#'   the prediction figures. Implies \code{prediction = TRUE}
+#'   (default: \code{FALSE}).
 #'
-#' @return A named list with five elements:
+#' @return A named list with eight elements:
 #'   \describe{
 #'     \item{\code{est}}{Main estimation results as a \code{data.table} with
 #'       columns \code{h}, \code{variable}, \code{estimate}, \code{se},
@@ -167,6 +177,22 @@
 #'     \item{\code{plot}}{A \code{ggplot2} event study plot with 95\%
 #'       confidence intervals, built from \code{se_correct} where it has
 #'       been computed and from the naive \code{se} otherwise.}
+#'     \item{\code{pred}}{If \code{prediction = TRUE}, a \code{data.table}
+#'       with one row per horizon and group (\code{dtreat} = 1: treated;
+#'       0: treated without treatment, i.e. the control counterfactual):
+#'       \code{estimate}/\code{se} (predicted change since the reference
+#'       period), \code{level_common}/\code{se_common} (level on the common
+#'       treated anchor; \code{se_common} treats the anchor as fixed and so
+#'       equals \code{se}) and \code{level_group}/\code{se_group} (level on the
+#'       group-specific anchors). The reference period is included with a
+#'       change of 0. Standard-error columns are \code{NA} unless
+#'       \code{prediction_se = TRUE}. \code{NULL} otherwise.}
+#'     \item{\code{pred_anchor}}{If \code{prediction = TRUE}, the two anchors
+#'       (baseline levels) and their standard errors. \code{NULL} otherwise.}
+#'     \item{\code{pred_plot}}{If \code{prediction = TRUE}, a list of three
+#'       \code{ggplot2} figures: \code{change} (no anchor), \code{common}
+#'       (common anchor) and \code{group} (group-specific anchors).
+#'       \code{NULL} otherwise.}
 #'   }
 #'
 #' @details
@@ -224,6 +250,57 @@
 #' absorbed \code{FE} in the PS model; in the PS, time now enters as explicit
 #' dummies (\code{i(time)}) rather than an absorbed fixed effect, so that its
 #' uncertainty is propagated (identical point estimates).
+#'
+#' \strong{Predictions} (\code{prediction = TRUE}). At each horizon \eqn{h},
+#' the predicted change of the treated with treatment is the weighted mean of
+#' the observed change among treated observations of the final estimation
+#' sample, \eqn{\mu_1(h)}, and the predicted change without treatment is
+#' \eqn{\mu_0(h) = \mu_1(h) - \widehat{ATT}(h)}, using the ATT reported in
+#' \code{est}. The weights are the survey weights (or 1); for the CSA methods
+#' the cohort means are aggregated with the same cohort weights as
+#' \code{fixest::aggregate()}. For \code{"lpdid_adj"}, \eqn{\mu_0} is the mean
+#' of the control-model predictions over the treated; for \code{"lpdid_dr"} it
+#' adds the IPW-weighted control residual term. For the regression-based
+#' \code{"lpdid"} (variance-weighted ATT) it equals the average prediction
+#' over the treated with \code{dtreat} set to 1 and 0, since WLS residuals are
+#' orthogonal to the treatment dummy. These are therefore predictions for the
+#' treated, with and without treatment.
+#'
+#' Two anchors (levels at the reference period) are computed once, on the
+#' \eqn{h = 0} clean sample: the treated anchor is the weighted mean of the
+#' reference-period outcome among treated observations; the control anchor
+#' is the weighted mean of the same variable among controls, period by
+#' period, averaged with the treated observations' period shares (i.e.
+#' adjusted to the treated's period mix, but not for covariates). Periods
+#' with treated observations but no control are dropped from this average,
+#' with a warning. The common-anchor figure adds the treated anchor to both
+#' curves, so that the gap is the ATT; the group-anchor figure adds each
+#' group's own anchor, so that the gap is the period-adjusted baseline
+#' difference plus the ATT.
+#'
+#' With \code{prediction_se = TRUE}, standard errors are computed from
+#' cluster-level influence functions (first element of \code{clusters}, or
+#' \code{unit}): \eqn{\mathrm{IF}(\mu_1)} for the treated mean, and
+#' \eqn{\mathrm{IF}(\mu_1) - \mathrm{IF}(ATT)} for the counterfactual, which
+#' keeps their covariance. \eqn{\mathrm{IF}(ATT)} is the corrected one used for
+#' \code{se_correct} where it applies (\code{"lpdid_adj"} and
+#' \code{"lpdid_dr"} always, as their correction is computed for this purpose
+#' even with \code{se_correction = FALSE}; \code{"lpdid_rw"} and
+#' \code{"lpdid_ipw"} only with \code{se_correction_rw_ipw = TRUE}) and the
+#' regression-score one otherwise; for the CSA methods the aggregation
+#' weights are treated as fixed, as in \code{fixest::aggregate()}. Level
+#' standard errors add the anchor's influence function, clusters being matched
+#' across the two samples, so the anchor's sampling uncertainty and its
+#' covariance with the predicted changes are included. This applies to the
+#' group-anchor levels only: in the common-anchor figure the anchor is the
+#' same constant for both curves, so its uncertainty shifts them jointly and
+#' says nothing about their comparison; it is treated as fixed there
+#' (\code{se_common} = \code{se}), and reported in \code{pred_anchor}. All prediction
+#' standard errors use the \eqn{G/(G-1)} small-sample factor; they can thus
+#' differ slightly from the ATT standard errors in \code{est}, which follow
+#' each method's own convention. Under heterogeneous effects, the
+#' counterfactual curve inherits the estimand of each method (e.g.
+#' variance-weighted for \code{"lpdid"}).
 #'
 #' @references
 #'   Dube, A., Girardi, D., Jorda, O., & Taylor, A. M. (2023).
@@ -349,7 +426,9 @@ lpdidcsa <- function(data,
                      se_correction  = TRUE,
                      se_correction_rw_ipw = FALSE,
                      ps_trim        = 0.995,
-                     time_x_controls = FALSE)
+                     time_x_controls = FALSE,
+                     prediction     = FALSE,
+                     prediction_se  = FALSE)
 {
   # ── Input validation ───────────────────────────────────────────────────────
   valid_meths <- c("lpdid", "lpdid_rw", "lpdid_adj", "lpdid_dr",
@@ -365,12 +444,25 @@ lpdidcsa <- function(data,
     is.logical(se_correction_rw_ipw) && length(se_correction_rw_ipw) == 1,
     is.numeric(ps_trim) && length(ps_trim) == 1 && ps_trim > 0 && ps_trim <= 1,
     is.logical(time_x_controls) && length(time_x_controls) == 1,
+    is.logical(prediction)    && length(prediction)    == 1,
+    is.logical(prediction_se) && length(prediction_se) == 1,
     meth %in% valid_meths
   )
 
   if (isTRUE(time_x_controls) && isTRUE(one_reg)) {
     warning("time_x_controls is only implemented for one_reg = FALSE; ignored.")
     time_x_controls <- FALSE
+  }
+
+  if (isTRUE(prediction_se) && !isTRUE(prediction)) {
+    message("prediction_se = TRUE implies prediction = TRUE.")
+    prediction <- TRUE
+  }
+
+  if (isTRUE(prediction) && isTRUE(one_reg)) {
+    warning("prediction is only implemented for one_reg = FALSE; ignored.")
+    prediction    <- FALSE
+    prediction_se <- FALSE
   }
 
   if (isTRUE(se_correction_rw_ipw) && isTRUE(one_reg) &&
@@ -776,7 +868,10 @@ lpdidcsa <- function(data,
   # this is a partial correction only (absorbed FE's own sampling
   # uncertainty is not propagated, since fixest's coef() excludes it).
   # Single-way clustering only (cl_col), matching lpdid.ado's own limitation.
-  ra_combined_se <- function(control_reg, ctrl_df_h, trt_df, att_hat, e1, wgt_trt, cl_col) {
+  # return_if = TRUE: returns list(se, Phi), Phi being the cluster sums of the
+  # ATT influence function (named by cluster), used by prediction_se.
+  ra_combined_se <- function(control_reg, ctrl_df_h, trt_df, att_hat, e1, wgt_trt, cl_col,
+                             return_if = FALSE) {
     bread_c <- sandwich::bread(control_reg) / control_reg$nobs   # undo sandwich's n-scaling
     score_beta_ctrl <- sandwich::estfun(control_reg)
     # sandwich::estfun() does not reliably attach column names for fixest
@@ -803,7 +898,9 @@ lpdidcsa <- function(data,
 
     S <- tapply(c(psi_ctrl, psi_trt),
                 c(ctrl_df_used[[cl_col]], trt_df[[cl_col]]), sum)
-    sqrt(sum(S^2))
+    se <- sqrt(sum(S^2))
+    if (!isTRUE(return_if)) return(se)
+    list(se = se, Phi = setNames(as.numeric(S), names(S)))
   }
 
   # Combined cluster-level standard error for the doubly robust (DR)
@@ -830,8 +927,12 @@ lpdidcsa <- function(data,
   # ra_combined_se above. ps_mod is assumed fit on clean_df directly (no
   # further remapping needed there under normal circumstances), but a guard
   # is still applied in case ps_mod also silently drops rows.
+  # return_if = TRUE: returns list(se, Phi), Phi being the cluster sums of
+  # att_if / n (the ATT's influence function on the "sum" scale, mean of
+  # att_if being 0 by construction), used by prediction_se.
   dr_combined_se <- function(control_reg, ctrl_full_idx, ps_mod, clean_df,
-                             w_treat, w_cont, dy, mu0, eta0, eta1, cl_col) {
+                             w_treat, w_cont, dy, mu0, eta0, eta1, cl_col,
+                             return_if = FALSE) {
     n <- nrow(clean_df)
 
     bread_beta <- sandwich::bread(control_reg)
@@ -880,7 +981,9 @@ lpdidcsa <- function(data,
 
     se_df <- data.frame(att_if = att_if, .cl = clean_df[[cl_col]])
     se_mod <- fixest::feols(att_if ~ 1, cluster = ~.cl, data = se_df)
-    unname(se_mod$coeftable[1, "Std. Error"])
+    se <- unname(se_mod$coeftable[1, "Std. Error"])
+    if (!isTRUE(return_if)) return(se)
+    list(se = se, Phi = cl_sum(att_if / n, clean_df[[cl_col]]))
   }
 
 
@@ -914,8 +1017,12 @@ lpdidcsa <- function(data,
   #   bw     : base weight b over the rows of est_df
   #   ps_mod : logit (ipw only), fit on ps_df (rows after drop_missing,
   #            before trimming)
+  # return_if = TRUE: returns list(V = c(Vc, Vu), Phi_c), Phi_c being the
+  # cluster sums of the corrected influence function of the treatment
+  # coefficient (named by cluster), used by prediction_se.
   rw_ipw_combined_se <- function(mod, est_df, bw, cl_col,
-                                 ps_mod = NULL, ps_df = NULL) {
+                                 ps_mod = NULL, ps_df = NULL,
+                                 return_if = FALSE) {
     cn <- names(coef(mod))
     k  <- grep(col_dtreat, cn, fixed = TRUE)[1]
     if (is.na(k)) stop("treatment coefficient not found in the final model")
@@ -961,9 +1068,12 @@ lpdidcsa <- function(data,
       cl    <- c(cl, ps_df[[cl_col]])
     }
 
-    Vc <- sum((rowsum(phi, cl) %*% Hinv[, k])^2)
+    Pc <- rowsum(phi, cl) %*% Hinv[, k]
+    Vc <- sum(Pc^2)
     Vu <- sum((rowsum(score, est_df[[cl_col]]) %*% Hinv[, k])^2)
-    c(Vc = Vc, Vu = Vu)
+    if (!isTRUE(return_if)) return(c(Vc = Vc, Vu = Vu))
+    list(V = c(Vc = Vc, Vu = Vu),
+         Phi_c = setNames(as.numeric(Pc), rownames(Pc)))
   }
 
   # Coerce a feols/feglm coeftable to a standardised data.table (one horizon)
@@ -1264,6 +1374,188 @@ lpdidcsa <- function(data,
     setcolorder(dt, c(head(others, pos), cols, tail(others, length(others) - pos)))
     invisible(dt)
   }
+  # ── Prediction helpers (prediction = TRUE) ─────────────────────────────────
+  # At each horizon, mu1 = weighted mean change of the treated (estimation
+  # sample), mu0 = mu1 - ATT. Influence functions are kept at the cluster
+  # level on the "sum" scale (estimate - truth ~ sum of the terms), named by
+  # cluster id, so that terms from different samples (horizon sample, anchor
+  # sample, control-fitting stage, PS stage) can be added cluster by cluster.
+
+  pred_store <- list()
+  store_pred <- function(h, res) pred_store[[as.character(h)]] <<- res
+
+  # Cluster sums of a per-observation term, named by cluster id
+  cl_sum <- function(phi, cl) {
+    s <- rowsum(as.numeric(phi), as.character(cl), reorder = FALSE)
+    setNames(as.numeric(s), rownames(s))
+  }
+
+  # a + sign_b * b, aligned on cluster ids (missing cluster = 0)
+  add_cl <- function(a, b, sign_b = 1) {
+    ids <- union(names(a), names(b))
+    va <- a[ids]; va[is.na(va)] <- 0
+    vb <- b[ids]; vb[is.na(vb)] <- 0
+    setNames(as.numeric(va) + sign_b * as.numeric(vb), ids)
+  }
+
+  # Cluster-robust SE from cluster-level IF, with the G/(G-1) adjustment
+  se_cl <- function(Phi) {
+    G <- length(Phi)
+    if (is.null(Phi) || G < 2) return(NA_real_)
+    sqrt(G / (G - 1) * sum(Phi^2))
+  }
+
+  # Weighted treated mean of dy, aggregated over the columns of X (cohort
+  # indicators; a single column for the non-CSA methods) with fixed weights
+  # omega: mu1 = sum_c omega_c * mu1_c, mu1_c = sum(w X_c dy) / sum(w X_c).
+  treated_mean <- function(X, w, dy, omega, cl) {
+    X    <- as.matrix(X)
+    S    <- colSums(w * X)
+    mu_c <- colSums(w * X * dy) / S
+    a    <- omega / S
+    phi  <- w * (as.numeric(X %*% a) * dy - as.numeric(X %*% (a * mu_c)))
+    list(mu1 = sum(omega * mu_c), Phi = cl_sum(phi, cl))
+  }
+
+  # Cluster-level IF of the linear combination cvec' beta of a feols fit:
+  # beta_hat - beta ~ Hinv sum_i s_i, Hinv = bread()/nobs (fixest convention,
+  # as in rw_ipw_combined_se). `cl`: cluster ids of the rows used (obs(mod)).
+  reg_att_if <- function(mod, cl, cvec) {
+    sc <- sandwich::estfun(mod)
+    stopifnot(ncol(sc) == length(coef(mod)), nrow(sc) == length(cl))
+    Hinv <- sandwich::bread(mod) / mod$nobs
+    cl_sum(sc %*% (Hinv %*% cvec), cl)
+  }
+
+  make_pred <- function(h, mu1, att, Phi1 = NULL, Phiatt = NULL) {
+    res <- list(h = h, mu1 = mu1, mu0 = mu1 - att, Phi1 = NULL, Phi0 = NULL)
+    if (isTRUE(prediction_se) && !is.null(Phi1) && !is.null(Phiatt)) {
+      res$Phi1 <- Phi1
+      res$Phi0 <- add_cl(Phi1, Phiatt, -1)
+    }
+    res
+  }
+
+  # Predictions never stop the estimation: failures become warnings
+  safe_pred <- function(h, expr) {
+    res <- tryCatch(expr, error = function(e) {
+      warning("Prediction failed at h=", h, ": ", conditionMessage(e))
+      NULL
+    })
+    if (!is.null(res)) store_pred(h, res)
+    invisible(NULL)
+  }
+
+  # Regression-based methods with a single treatment coefficient (lpdid,
+  # lpdid_rw, lpdid_ipw). du: rows of the fit data used by mod (obs(mod));
+  # b: treated weights on du (survey weight or 1); Phiatt: corrected ATT IF if
+  # available, otherwise the regression-score IF is used.
+  pred_reg <- function(h, mod, du, b, cl_col, Phiatt = NULL) {
+    k <- grep(col_dtreat, names(coef(mod)), fixed = TRUE)[1]
+    if (is.na(k)) stop("treatment coefficient not found in the final model")
+    D  <- du[[col_dtreat]]
+    dy <- du[[dep_at(h)]] - du[[col_dep_ref]]
+    tm <- treated_mean(matrix(D), b * D, dy, 1, du[[cl_col]])
+    if (isTRUE(prediction_se) && is.null(Phiatt)) {
+      cvec <- numeric(length(coef(mod))); cvec[k] <- 1
+      Phiatt <- reg_att_if(mod, du[[cl_col]], cvec)
+    }
+    make_pred(h, tm$mu1, unname(coef(mod)[k]), tm$Phi, Phiatt)
+  }
+
+  # CSA methods: cohort coefficients aggregated by fixest::aggregate(). The
+  # cohort weights are recovered as the (weighted, then unweighted) sums of
+  # the cohort indicators and checked against the reported aggregate.
+  pred_csa <- function(h, mod, du, att, cl_col) {
+    cn  <- names(coef(mod))
+    idx <- grep(col_dtreat, cn, fixed = TRUE)
+    if (length(idx) == 0) stop("no treatment coefficient in the final model")
+    X  <- mm_aligned(mod, du, cn[idx])
+    w  <- weights(mod)
+    if (is.null(w)) w <- rep(1, nrow(du))
+    stopifnot(length(w) == nrow(du))
+    dy   <- du[[dep_at(h)]] - du[[col_dep_ref]]
+    beta <- coef(mod)[idx]
+    omega <- NULL
+    for (cw in list(colSums(w * X), colSums(X))) {
+      om <- cw / sum(cw)
+      if (abs(sum(om * beta) - att) <= 1e-7 * max(1, abs(att))) { omega <- om; break }
+    }
+    if (is.null(omega))
+      stop("could not reproduce the cohort weights of fixest::aggregate()")
+    tm <- treated_mean(X, w, dy, omega, du[[cl_col]])
+    Phiatt <- NULL
+    if (isTRUE(prediction_se)) {
+      cvec <- numeric(length(cn)); cvec[idx] <- omega
+      Phiatt <- reg_att_if(mod, du[[cl_col]], cvec)
+    }
+    make_pred(h, tm$mu1, att, tm$Phi, Phiatt)
+  }
+
+  # Anchors at the reference period, on the h = 0 clean sample: treated mean
+  # of the reference outcome, and control mean adjusted to the treated's
+  # period mix. Returns levels and cluster-level IFs.
+  compute_anchors <- function() {
+    a_df <- clean_sample(df, 0)
+    wcol <- if (!is.null(weight)) weight else if (!is.null(weight_h)) var_at(0, weight_h) else NULL
+    if (!is.null(wcol)) a_df <- a_df[!is.na(get(wcol))]
+    if (nrow(a_df) == 0 || sum(a_df[[col_dtreat]]) == 0)
+      stop("no treated observation in the h = 0 sample")
+    w  <- if (is.null(wcol)) rep(1, nrow(a_df)) else a_df[[wcol]]
+    D  <- a_df[[col_dtreat]]
+    y  <- a_df[[col_dep_ref]]
+    tt <- as.character(a_df[[col_time]])
+    cl <- a_df[[b_col_clusters[1]]]
+
+    S1    <- sum(w * D)
+    base1 <- sum(w * D * y) / S1
+    phi1  <- w * D * (y - base1) / S1
+
+    S1t <- tapply(w * D, tt, sum)
+    S0t <- tapply(w * (1 - D), tt, sum)
+    m0t <- tapply(w * (1 - D) * y, tt, sum) / S0t
+    ok  <- names(S1t)[S1t > 0 & S0t > 0]
+    if (length(ok) == 0) stop("no period with both treated and control observations")
+    if (any(S1t > 0 & !(names(S1t) %in% ok)))
+      warning("Control anchor: periods with treated but no control observation ",
+              "dropped (", paste(setdiff(names(S1t)[S1t > 0], ok), collapse = ", "), ").")
+    S1ok  <- sum(S1t[ok])
+    st    <- S1t[ok] / S1ok
+    base0 <- sum(st * m0t[ok])
+
+    lk <- function(v) { x <- as.numeric(v[tt]); x[is.na(x) | !(tt %in% ok)] <- 0; x }
+    s_i <- lk(st); m_i <- lk(m0t); S0_i <- lk(S0t)
+    in_ok <- tt %in% ok
+    phi0 <- ifelse(in_ok & D == 0, w * s_i * (y - m_i) / S0_i, 0) +
+      ifelse(in_ok & D == 1, w * (m_i - base0) / S1ok, 0)
+
+    list(base1 = base1, base0 = base0,
+         Phi1 = cl_sum(phi1, cl), Phi0 = cl_sum(phi0, cl))
+  }
+
+  # One prediction figure: x = horizon, two groups, optional 95% CI
+  make_pred_plot <- function(dt, yvar, sevar, ylab, title, ci_caption = "95% CI") {
+    show_ci <- isTRUE(prediction_se) && any(!is.na(dt[[sevar]]))
+    hs <- sort(unique(dt$h))
+    pd <- position_dodge(width = 0.3)
+    p <- ggplot(dt, aes(x = .data$h, y = .data[[yvar]],
+                        colour = .data$group, shape = .data$group)) +
+      geom_vline(xintercept = -0.5, colour = "red", linetype = "dashed") +
+      geom_line(position = pd) +
+      geom_point(size = 2, position = pd)
+    if (show_ci)
+      p <- p + geom_errorbar(aes(ymin = .data[[yvar]] - 1.96 * .data[[sevar]],
+                                 ymax = .data[[yvar]] + 1.96 * .data[[sevar]]),
+                             width = 0, position = pd, na.rm = TRUE)
+    p +
+      scale_x_continuous(breaks = hs,
+                         minor_breaks = seq(min(hs) - 0.5, max(hs) + 0.5, by = 1)) +
+      labs(x = "Horizon", y = ylab, title = title, colour = NULL, shape = NULL,
+           caption = if (show_ci) ci_caption else NULL) +
+      theme_minimal() +
+      theme(panel.grid.major.x = element_blank(), legend.position = "bottom")
+  }
+
   # ── Method dispatch ────────────────────────────────────────────────────────
 
   did_est     <- NULL
@@ -1312,6 +1604,12 @@ lpdidcsa <- function(data,
         print("- LPDiD Regression")
 
         mod     <- fit_feols(formula, clean_df, col_clusters, col_weight)
+
+        if (isTRUE(prediction)) {
+          du <- clean_df[fixest::obs(mod)]
+          bu <- if (!is.null(col_weight)) du[[col_weight]] else rep(1, nrow(du))
+          safe_pred(h, pred_reg(h, mod, du, bu, col_clusters[1]))
+        }
 
         clean_df <- drop_missing(clean_df,mod)
 
@@ -1422,19 +1720,28 @@ lpdidcsa <- function(data,
 
         est <- export_coeftable(mod, h, formula)
 
+        rw_res <- NULL
         if (isTRUE(se_correction_rw_ipw)) {
 
           print("- Standard error correction")
 
           bw <- if (!is.null(col_weight)) rw_df[[col_weight]] else rep(1, nrow(rw_df))
-          V  <- tryCatch(
-            rw_ipw_combined_se(mod, rw_df, bw, col_clusters[1]),
+          rw_res <- tryCatch(
+            rw_ipw_combined_se(mod, rw_df, bw, col_clusters[1], return_if = TRUE),
             error = function(e) {
               warning("RW SE correction failed at h=", h, ": ", conditionMessage(e))
-              c(Vc = NA_real_, Vu = NA_real_)
+              NULL
             })
+          V <- if (is.null(rw_res)) c(Vc = NA_real_, Vu = NA_real_) else rw_res$V
           est[, se_correct := fifelse(grepl(col_dtreat, variable, fixed = TRUE),
                                       se * sqrt(V[["Vc"]] / V[["Vu"]]), NA_real_)]
+        }
+
+        if (isTRUE(prediction)) {
+          du <- rw_df[fixest::obs(mod)]
+          bu <- if (!is.null(col_weight)) du[[col_weight]] else rep(1, nrow(du))
+          safe_pred(h, pred_reg(h, mod, du, bu, col_clusters[1],
+                                if (!is.null(rw_res)) rw_res$Phi_c))
         }
 
         add_meta(est,clean_df)
@@ -1544,17 +1851,30 @@ lpdidcsa <- function(data,
         did_adj <- fit_feols(formula_adj, trt_df, col_clusters, col_weight)
         se_naive <- did_adj$coeftable[1, "Std. Error"]
 
-        se_correct <- if (isTRUE(se_correction)) {
-          print("- Standard error correction")
-          tryCatch(
+        # The combined IF is also needed for the prediction SEs
+        ra_res <- NULL
+        if (isTRUE(se_correction) || isTRUE(prediction_se)) {
+          if (isTRUE(se_correction)) print("- Standard error correction")
+          ra_res <- tryCatch(
             ra_combined_se(control_reg, ctrl_df_h, trt_df,
-                           att_hat, e1, wgt_trt, col_clusters[1]),
+                           att_hat, e1, wgt_trt, col_clusters[1],
+                           return_if = TRUE),
             error = function(e) {
               warning("RA SE correction failed at h=", h, ": ", conditionMessage(e))
-              NA_real_
+              NULL
             }
           )
-        } else NA_real_
+        }
+        se_correct <- if (isTRUE(se_correction) && !is.null(ra_res)) ra_res$se else NA_real_
+
+        if (isTRUE(prediction))
+          safe_pred(h, {
+            dy1 <- trt_df[[dep_at(h)]] - trt_df[[col_dep_ref]]
+            tm  <- treated_mean(matrix(1, nrow(trt_df), 1), wgt_trt, dy1, 1,
+                                trt_df[[col_clusters[1]]])
+            make_pred(h, tm$mu1, att_hat, tm$Phi,
+                      if (!is.null(ra_res)) ra_res$Phi)
+          })
 
         est <- data.table(
           h = h, variable = col_dtreat, estimate = att_hat,
@@ -1641,19 +1961,30 @@ lpdidcsa <- function(data,
         did_dr <- fit_feols("(treat_hat - cont_hat) ~ 1", clean_df, col_clusters, NULL)
         se_naive <- did_dr$coeftable[1, "Std. Error"]
 
-        se_correct <- if (isTRUE(se_correction)) {
-          print("- Standard error correction")
+        # The combined IF is also needed for the prediction SEs
+        dr_res <- NULL
+        if (isTRUE(se_correction) || isTRUE(prediction_se)) {
+          if (isTRUE(se_correction)) print("- Standard error correction")
 
-          tryCatch(
+          dr_res <- tryCatch(
             dr_combined_se(control_reg, ctrl_full_idx, ps_mod, clean_df,
                            clean_df$w_treat, clean_df$w_cont, clean_df$dy, clean_df$mu0,
-                           eta0, eta1, col_clusters[1]),
+                           eta0, eta1, col_clusters[1], return_if = TRUE),
             error = function(e) {
               warning("DR SE correction failed at h=", h, ": ", conditionMessage(e))
-              NA_real_
+              NULL
             }
           )
-        } else NA_real_
+        }
+        se_correct <- if (isTRUE(se_correction) && !is.null(dr_res)) dr_res$se else NA_real_
+
+        if (isTRUE(prediction))
+          safe_pred(h, {
+            tm <- treated_mean(matrix(clean_df[[col_dtreat]]), clean_df$w_treat,
+                               clean_df$dy, 1, clean_df[[col_clusters[1]]])
+            make_pred(h, tm$mu1, att_hat, tm$Phi,
+                      if (!is.null(dr_res)) dr_res$Phi)
+          })
 
         est <- data.table(
           h = h, variable = col_dtreat, estimate = att_hat,
@@ -1728,17 +2059,26 @@ lpdidcsa <- function(data,
 
         est <- export_coeftable(mod, h, paste0(formula_reg))
 
+        rw_res <- NULL
         if (isTRUE(se_correction_rw_ipw)) {
           print("- Standard error correction")
-          V <- tryCatch(
+          rw_res <- tryCatch(
             rw_ipw_combined_se(mod, clean_df, clean_df$attwgt, col_clusters[1],
-                               ps_mod = ps_mod, ps_df = ps_df),
+                               ps_mod = ps_mod, ps_df = ps_df, return_if = TRUE),
             error = function(e) {
               warning("IPW SE correction failed at h=", h, ": ", conditionMessage(e))
-              c(Vc = NA_real_, Vu = NA_real_)
+              NULL
             })
+          V <- if (is.null(rw_res)) c(Vc = NA_real_, Vu = NA_real_) else rw_res$V
           est[, se_correct := fifelse(grepl(col_dtreat, variable, fixed = TRUE),
                                       se * sqrt(V[["Vc"]] / V[["Vu"]]), NA_real_)]
+        }
+
+        if (isTRUE(prediction)) {
+          # treated: attwgt = survey weight (or 1)
+          du <- clean_df[fixest::obs(mod)]
+          safe_pred(h, pred_reg(h, mod, du, du$attwgt, col_clusters[1],
+                                if (!is.null(rw_res)) rw_res$Phi_c))
         }
 
         est_list[[i]] <- add_meta(est,clean_df)
@@ -1867,6 +2207,7 @@ lpdidcsa <- function(data,
                      data    = clean_df,
                      weights = clean_df$attwgt,
                      cluster = clean_df[,..col_clusters])
+        fit_df <- clean_df             # data passed to mod (for predictions)
 
         det_h         <- export_coeftable(mod, h, formula_reg)
         det_h         <- add_csa_meta(det_h, clean_df)
@@ -1874,6 +2215,9 @@ lpdidcsa <- function(data,
 
         # Aggregate cohort estimates to a single ATT per horizon
         mod_agg       <- aggregate(mod, paste0("(", col_dtreat, ")"))
+        if (isTRUE(prediction))
+          safe_pred(h, pred_csa(h, mod, fit_df[fixest::obs(mod)],
+                                unname(mod_agg[1, 1]), col_clusters[1]))
         est  <- export_agg(model     = mod_agg,
                            model_det = mod,
                            h         = h,
@@ -2013,6 +2357,7 @@ lpdidcsa <- function(data,
         print("- LPDiD regression")
         mod <- fit_feols(formula, clean_df, col_clusters, col_weight,
                          notes = !isTRUE(time_x_controls))
+        fit_df <- clean_df             # data passed to mod (for predictions)
 
         det_h         <- export_coeftable(mod, h, formula)
 
@@ -2022,6 +2367,9 @@ lpdidcsa <- function(data,
 
         # Aggregate cohort estimates to a single ATT per horizon
         mod_agg       <- aggregate(mod, paste0("(", col_dtreat, ")"))
+        if (isTRUE(prediction))
+          safe_pred(h, pred_csa(h, mod, fit_df[fixest::obs(mod)],
+                                unname(mod_agg[1, 1]), col_clusters[1]))
         est <- export_agg(model       = mod_agg,
                           model_det   = mod,
                           h           = h,
@@ -2124,12 +2472,91 @@ lpdidcsa <- function(data,
     theme_minimal() +
     theme(panel.grid.major.x = element_blank())
 
+  # ── Predictions: table, anchors and figures ───────────────────────────────
+  did_pred <- NULL
+  did_pred_anchor <- NULL
+  pred_plot <- NULL
+
+  if (isTRUE(prediction)) {
+    if (length(pred_store) == 0) {
+      warning("prediction = TRUE but no prediction could be computed.")
+    } else {
+      anc <- tryCatch(compute_anchors(), error = function(e) {
+        warning("Anchors could not be computed (", conditionMessage(e),
+                "); only the figure without anchor is drawn.")
+        NULL
+      })
+      b1 <- if (!is.null(anc)) anc$base1 else NA_real_
+      b0 <- if (!is.null(anc)) anc$base0 else NA_real_
+      A1 <- if (!is.null(anc)) anc$Phi1
+      A0 <- if (!is.null(anc)) anc$Phi0
+
+      se_of  <- function(Phi) if (isTRUE(prediction_se) && !is.null(Phi)) se_cl(Phi) else NA_real_
+      plus   <- function(a, b) if (is.null(a) || is.null(b)) NULL else add_cl(a, b)
+      ref_h  <- -1L - anticipation
+
+      rows <- lapply(pred_store, function(p) data.table(
+        h            = p$h,
+        dtreat       = c(1L, 0L),
+        estimate     = c(p$mu1, p$mu0),
+        se           = c(se_of(p$Phi1), se_of(p$Phi0)),
+        level_common = b1 + c(p$mu1, p$mu0),
+        se_common    = c(se_of(p$Phi1), se_of(p$Phi0)),   # anchor treated as fixed
+        level_group  = c(b1 + p$mu1, b0 + p$mu0),
+        se_group     = c(se_of(plus(A1, p$Phi1)), se_of(plus(A0, p$Phi0)))
+      ))
+      ref_rows <- data.table(
+        h            = ref_h,
+        dtreat       = c(1L, 0L),
+        estimate     = 0,
+        se           = if (isTRUE(prediction_se)) 0 else NA_real_,
+        level_common = b1,
+        se_common    = if (isTRUE(prediction_se)) 0 else NA_real_,
+        level_group  = c(b1, b0),
+        se_group     = c(se_of(A1), se_of(A0))
+      )
+      did_pred <- rbindlist(c(rows, list(ref_rows)))
+      did_pred[, h := as.numeric(h)]
+      did_pred[, group := factor(dtreat, levels = c(1L, 0L),
+                                 labels = c("Treated", "Control"))]
+      setcolorder(did_pred, c("h", "dtreat", "group"))
+      setorder(did_pred, -dtreat, h)
+
+      did_pred_anchor <- data.table(
+        group  = factor(c("Treated", "Control"), levels = c("Treated", "Control")),
+        dtreat = c(1L, 0L),
+        anchor = c(b1, b0),
+        se     = c(se_of(A1), se_of(A0)),
+        sample = "h = 0 clean sample, reference period"
+      )
+
+      pred_plot <- list(
+        change = make_pred_plot(did_pred, "estimate", "se",
+                                "Predicted change since reference period",
+                                "Predicted outcomes of the treated, with and without treatment")
+      )
+      if (!is.null(anc)) {
+        pred_plot$common <- make_pred_plot(did_pred, "level_common", "se_common",
+                                           "Predicted level",
+                                           "Predicted levels, common anchor (treated baseline)",
+                                           "95% CI conditional on the anchor (same as for the changes)")
+        pred_plot$group  <- make_pred_plot(did_pred, "level_group", "se_group",
+                                           "Predicted level",
+                                           "Predicted levels, group anchors (period-adjusted baselines)",
+                                           "95% CI including the anchors' sampling uncertainty")
+      }
+    }
+  }
+
   # ── Return ─────────────────────────────────────────────────────────────────
   list(
-    est     = did_est,
-    est_det = did_est_det,
-    ps      = did_est_ps,
-    or      = did_est_or,
-    plot    = plotdid
+    est         = did_est,
+    est_det     = did_est_det,
+    ps          = did_est_ps,
+    or          = did_est_or,
+    plot        = plotdid,
+    pred        = did_pred,
+    pred_anchor = did_pred_anchor,
+    pred_plot   = pred_plot
   )
 }

@@ -30,7 +30,9 @@ lpdidcsa(
   se_correction = TRUE,
   se_correction_rw_ipw = FALSE,
   ps_trim = 0.995,
-  time_x_controls = FALSE
+  time_x_controls = FALSE,
+  prediction = FALSE,
+  prediction_se = FALSE
 )
 }
 \arguments{
@@ -177,9 +179,21 @@ attached), so the treatment coefficient is named \code{dtreat} instead
 of \code{dtreat::1}, and the \code{"lpcsa"} cohort coefficients
 \code{dtreat:factor(year)2004} instead of \code{dtreat::1:year::2004}.
 Only for \code{one_reg = FALSE} (default: \code{FALSE}).}
+
+\item{prediction}{Logical. If \code{TRUE}, computes, at each horizon, the
+predicted outcome change (relative to the reference period) of the
+treated with and without treatment, stores them in \code{pred}, and
+draws three figures in \code{pred_plot}: changes without anchor, levels
+on a common anchor, and levels on group-specific anchors (see Details).
+Only for \code{one_reg = FALSE} (default: \code{FALSE}).}
+
+\item{prediction_se}{Logical. If \code{TRUE}, also computes cluster-robust
+standard errors of the predictions and adds 95\\% confidence intervals to
+the prediction figures. Implies \code{prediction = TRUE}
+(default: \code{FALSE}).}
 }
 \value{
-A named list with five elements:
+A named list with eight elements:
 \describe{
 \item{\code{est}}{Main estimation results as a \code{data.table} with
 columns \code{h}, \code{variable}, \code{estimate}, \code{se},
@@ -201,6 +215,22 @@ are in \code{or} and \code{ps}.}
 \item{\code{plot}}{A \code{ggplot2} event study plot with 95\\%
 confidence intervals, built from \code{se_correct} where it has
 been computed and from the naive \code{se} otherwise.}
+\item{\code{pred}}{If \code{prediction = TRUE}, a \code{data.table}
+with one row per horizon and group (\code{dtreat} = 1: treated;
+0: treated without treatment, i.e. the control counterfactual):
+\code{estimate}/\code{se} (predicted change since the reference
+period), \code{level_common}/\code{se_common} (level on the common
+treated anchor; \code{se_common} treats the anchor as fixed and so
+equals \code{se}) and \code{level_group}/\code{se_group} (level on the
+group-specific anchors). The reference period is included with a
+change of 0. Standard-error columns are \code{NA} unless
+\code{prediction_se = TRUE}. \code{NULL} otherwise.}
+\item{\code{pred_anchor}}{If \code{prediction = TRUE}, the two anchors
+(baseline levels) and their standard errors. \code{NULL} otherwise.}
+\item{\code{pred_plot}}{If \code{prediction = TRUE}, a list of three
+\code{ggplot2} figures: \code{change} (no anchor), \code{common}
+(common anchor) and \code{group} (group-specific anchors).
+\code{NULL} otherwise.}
 }
 }
 \description{
@@ -285,6 +315,57 @@ is treated as fixed. The same partial-correction caveats apply for
 absorbed \code{FE} in the PS model; in the PS, time now enters as explicit
 dummies (\code{i(time)}) rather than an absorbed fixed effect, so that its
 uncertainty is propagated (identical point estimates).
+
+\strong{Predictions} (\code{prediction = TRUE}). At each horizon \eqn{h},
+the predicted change of the treated with treatment is the weighted mean of
+the observed change among treated observations of the final estimation
+sample, \eqn{\mu_1(h)}, and the predicted change without treatment is
+\eqn{\mu_0(h) = \mu_1(h) - \widehat{ATT}(h)}, using the ATT reported in
+\code{est}. The weights are the survey weights (or 1); for the CSA methods
+the cohort means are aggregated with the same cohort weights as
+\code{fixest::aggregate()}. For \code{"lpdid_adj"}, \eqn{\mu_0} is the mean
+of the control-model predictions over the treated; for \code{"lpdid_dr"} it
+adds the IPW-weighted control residual term. For the regression-based
+\code{"lpdid"} (variance-weighted ATT) it equals the average prediction
+over the treated with \code{dtreat} set to 1 and 0, since WLS residuals are
+orthogonal to the treatment dummy. These are therefore predictions for the
+treated, with and without treatment.
+
+Two anchors (levels at the reference period) are computed once, on the
+\eqn{h = 0} clean sample: the treated anchor is the weighted mean of the
+reference-period outcome among treated observations; the control anchor
+is the weighted mean of the same variable among controls, period by
+period, averaged with the treated observations' period shares (i.e.
+adjusted to the treated's period mix, but not for covariates). Periods
+with treated observations but no control are dropped from this average,
+with a warning. The common-anchor figure adds the treated anchor to both
+curves, so that the gap is the ATT; the group-anchor figure adds each
+group's own anchor, so that the gap is the period-adjusted baseline
+difference plus the ATT.
+
+With \code{prediction_se = TRUE}, standard errors are computed from
+cluster-level influence functions (first element of \code{clusters}, or
+\code{unit}): \eqn{\mathrm{IF}(\mu_1)} for the treated mean, and
+\eqn{\mathrm{IF}(\mu_1) - \mathrm{IF}(ATT)} for the counterfactual, which
+keeps their covariance. \eqn{\mathrm{IF}(ATT)} is the corrected one used for
+\code{se_correct} where it applies (\code{"lpdid_adj"} and
+\code{"lpdid_dr"} always, as their correction is computed for this purpose
+even with \code{se_correction = FALSE}; \code{"lpdid_rw"} and
+\code{"lpdid_ipw"} only with \code{se_correction_rw_ipw = TRUE}) and the
+regression-score one otherwise; for the CSA methods the aggregation
+weights are treated as fixed, as in \code{fixest::aggregate()}. Level
+standard errors add the anchor's influence function, clusters being matched
+across the two samples, so the anchor's sampling uncertainty and its
+covariance with the predicted changes are included. This applies to the
+group-anchor levels only: in the common-anchor figure the anchor is the
+same constant for both curves, so its uncertainty shifts them jointly and
+says nothing about their comparison; it is treated as fixed there
+(\code{se_common} = \code{se}), and reported in \code{pred_anchor}. All prediction
+standard errors use the \eqn{G/(G-1)} small-sample factor; they can thus
+differ slightly from the ATT standard errors in \code{est}, which follow
+each method's own convention. Under heterogeneous effects, the
+counterfactual curve inherits the estimand of each method (e.g.
+variance-weighted for \code{"lpdid"}).
 }
 \examples{
 \donttest{
