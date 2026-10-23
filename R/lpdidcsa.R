@@ -288,7 +288,11 @@
 #'   \item \code{"lpdid_dr"}: the doubly robust (AIPW) score on the level.
 #' }
 #' Without covariates, all methods give the same control anchor: the control
-#' mean of each period, averaged with the treated's period shares. Treated
+#' mean of each period, averaged with the treated's period shares. If the
+#' reference-period outcome itself is a covariate, the regression-adjustment
+#' and doubly robust anchors coincide by construction (gap 0, with a
+#' message); the IPW gap then measures the residual imbalance of the
+#' propensity score on that variable. Treated
 #' observations without prediction (period or fixed effect absent among
 #' controls) are dropped from the anchors, with a warning. The common-anchor
 #' figure adds the treated anchor to both curves, so that the gap between
@@ -1547,6 +1551,24 @@ lpdidcsa <- function(data,
     kind <- if (meth %in% c("lpdid_ipw", "lpcsa_ipw")) "ipw" else
             if (meth == "lpdid_dr") "dr" else "ra"
 
+    # Reference-period outcome among the covariates (e.g. controls = "lemp_tm1"):
+    # an outcome model conditioning on the baseline level fits it exactly, so
+    # the RA and DR gaps are 0 by construction. (R would otherwise silently
+    # drop the outcome from the right-hand side of the level regression.)
+    ref_in_cov <- length(ct_a) > 0 && isTRUE(tryCatch(
+      y_ref %in% attr(terms(reformulate(ct_a)), "term.labels"),
+      error = function(e) FALSE))
+    if (ref_in_cov && kind %in% c("ra", "dr")) {
+      message("The reference-period outcome (", y_ref, ") is a covariate: the ",
+              "adjusted baseline gap is 0 by construction.")
+      tm <- tr_mean(a_df)
+      return(list(base1 = tm$mu1, base0 = tm$mu1, gap = 0,
+                  adj = paste0("period and covariates, including the reference-period ",
+                               "outcome (gap 0 by construction)"),
+                  se_gap = if (isTRUE(prediction_se)) 0 else NA_real_,
+                  by_construction = TRUE))
+    }
+
     if (kind == "ra") {
       ctrl_df <- a_df[get(col_dtreat) == 0]
       f_ctrl  <- build_control_formula(h0, ct_a, fe_a, ctrl_df, lhs_str = y_ref)
@@ -1617,7 +1639,7 @@ lpdidcsa <- function(data,
     adj <- if (has_cov) paste0("period and covariates, ", how) else "period (no covariates)"
     list(base1 = tm$mu1, base0 = tm$mu1 - gap, gap = gap, adj = adj,
          se_gap = if (isTRUE(prediction_se)) se_cl(Phig) else NA_real_,
-         how = how)
+         by_construction = FALSE)
   }
 
   # One prediction figure: x = horizon, two groups, optional 95% CI of the
@@ -2638,7 +2660,9 @@ lpdidcsa <- function(data,
         gap_dt <- data.table(h = ref_h,
                              ymin = b0 - 1.96 * anc$se_gap,
                              ymax = b0 + 1.96 * anc$se_gap)
-        cap_group <- paste0(
+        cap_group <- if (isTRUE(anc$by_construction)) paste0(
+          "Control anchor adjusted for ", anc$adj, ".",
+          if (isTRUE(prediction_se)) paste0("\n", ci_txt)) else paste0(
           "Control anchor adjusted for ", anc$adj, ".\n",
           sprintf("Baseline gap (treated - control) = %.3f", anc$gap),
           if (isTRUE(prediction_se) && is.finite(anc$se_gap))
@@ -2649,7 +2673,8 @@ lpdidcsa <- function(data,
         pred_plot$group <- make_pred_plot(
           did_pred, "level_group", "Predicted level",
           "Predicted levels, group anchors",
-          caption = cap_group, gap = gap_dt)
+          caption = cap_group,
+          gap = if (!isTRUE(anc$by_construction)) gap_dt)
       }
     }
   }
