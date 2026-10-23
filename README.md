@@ -2,6 +2,8 @@
 
 **Local Projections DiD and Callaway & Sant'Anna Event Studies in R.**
 
+Version 0.3.0
+
 ## License and Credits
 
 -   The code in this package is licensed under the [MIT License](LICENSE).
@@ -17,11 +19,27 @@
 1.  **`lpdidcsa_data()`** — reshapes a panel into the format required for estimation
 2.  **`lpdidcsa()`** — estimates event study coefficients, produces an event study plot and, optionally, predicted outcome paths of the treated with and without treatment
 
-The package implements the LP-DiD estimator of Dube, Girardi, Jordà & Taylor (2025) and a local-projection version of the Callaway & Sant'Anna (2021) estimator, with support for absorbing and non-absorbing treatments. Seven estimators are available: LP-DiD and reweighted LP-DiD with or without control variables, LP-DiD with regression adjustment, inverse probability weighting LP-DiD, doubly robust LP-DiD (Sant'Anna & Zhao, 2020), LP-CSA with or without control variables and inverse probability weighting LP-CSA.
+The package implements the local projections difference-in-differences (LP-DiD) estimator of Dube, Girardi, Jordà & Taylor (2025) and a local-projection version of the Callaway & Sant'Anna (2021) estimator (LP-CSA), for absorbing and non-absorbing treatments. At each horizon, treated observations are compared with clean controls (never-treated or not-yet-treated units), so that already-treated units never serve as controls.
 
-For the regression-adjustment and doubly robust estimators (and optionally for the reweighted and IPW ones), standard errors can be corrected for the estimation of the first-stage nuisance models (outcome regression, propensity score, reweighting shares) through cluster-level influence functions.
+The seven estimators differ in how they handle heterogeneous treatment effects:
+
+-   **across cohorts** (the period in which treatment starts): `lpdid` returns a variance-weighted average of cohort-specific effects, while all other estimators return the equally-weighted ATT, by reweighting (`lpdid_rw`, `lpdid_ipw`) or by estimating cohort-specific effects (`lpcsa`, `lpcsa_ipw`);
+-   **across values of covariates**: `lpdid`, `lpdid_rw` and `lpcsa` add covariates linearly and assume effects do not vary with them, whereas regression adjustment (`lpdid_adj`), inverse probability weighting (`lpdid_ipw`, `lpcsa_ipw`) and the doubly robust estimator (`lpdid_dr`, Sant'Anna & Zhao, 2020) allow effects to vary with covariates, given a correct outcome model, a correct propensity score model, or either one.
+
+For the regression-adjustment and doubly robust estimators, and optionally for the reweighted and IPW ones, standard errors account for the estimation of the first-stage models (outcome regression, propensity score, reweighting shares) through cluster-level influence functions. The predicted paths are returned in three figures (without anchor, with a common anchor, with group-specific anchors), with confidence intervals on request.
 
 In this [methodological note](docs/LPDiD_methodological_note.pdf), we clarify the links between CSA's, LP-CSA and LP-DID estimates and introduce the inverse probability weighting strategy for LP-DiD.
+
+------------------------------------------------------------------------
+
+## What's new in 0.3.0
+
+-   New doubly robust estimator `lpdid_dr` (outcome regression + inverse probability weighting).
+-   `lpdid_adj` now uses a control-only outcome regression with an influence-function standard error (`se_correct`), replacing `marginaleffects::avg_comparisons()`; it is faster and reproduces `lpdid.ado`'s regression-adjustment standard error. `one_reg = TRUE` is no longer available for this method.
+-   Corrected standard errors for `lpdid_rw` and `lpdid_ipw` (`se_correction_rw_ipw`).
+-   Propensity score trimming (`ps_trim`) and period-varying covariate effects (`time_x_controls`).
+-   Predicted outcome paths of the treated with and without treatment, with covariate-adjusted anchors, three figures and optional confidence intervals (`prediction`, `prediction_se`).
+-   New output element `or` (first-stage outcome regressions).
 
 ------------------------------------------------------------------------
 
@@ -228,7 +246,7 @@ A named list with eight elements:
 | `or` | First-stage outcome regression on the control group (`lpdid_adj` and `lpdid_dr` only) |
 | `plot` | `ggplot2` event study plot with 95% confidence intervals |
 | `pred` | Predicted paths (if `prediction = TRUE`, see below) |
-| `pred_anchor` | Baseline levels used as anchors, with their standard errors (if `prediction = TRUE`) |
+| `pred_anchor` | Treated and control anchors, baseline gap and its standard error (if `prediction = TRUE`) |
 | `pred_plot` | List of three `ggplot2` figures: `change`, `common`, `group` (if `prediction = TRUE`) |
 
 ### Predictions
@@ -240,15 +258,24 @@ With `prediction = TRUE`, `lpdidcsa()` also returns, for each horizon, the predi
 
 For `lpdid_adj`, μ₀ is the mean of the control-model predictions over the treated; for `lpdid_dr`, it adds the IPW-weighted control residual term; for `lpdid`, it equals the average prediction over the treated with `dtreat` set to 0 (it inherits the variance-weighted estimand). For CSA methods, cohort means are aggregated with the same cohort weights as `fixest::aggregate()`.
 
-Two anchors (reference-period levels) are computed on the *h* = 0 sample: the treated's weighted mean of the reference-period outcome, and the controls' mean adjusted to the treated's period mix (not to covariates). Three figures are drawn:
+Two anchors (reference-period levels) are computed on the *h* = 0 sample, with the estimator's weights, controls and fixed effects:
+
+-   **treated anchor**: weighted mean of the reference-period outcome among the treated;
+-   **control anchor**: predicted baseline level of the controls for the treated's periods and covariates, using each method's own adjustment applied to the level instead of the change: regression adjustment (outcome regression fitted on the controls, predicted for the treated) for `lpdid`, `lpdid_rw`, `lpcsa` and `lpdid_adj`; inverse probability weighting (propensity score, trimming and period reweighting) for `lpdid_ipw` and `lpcsa_ipw`; the doubly robust score for `lpdid_dr`.
+
+Without covariates, the control anchor is simply the control mean of each period averaged with the treated's period shares. With covariates that explain baseline levels, the control anchor moves close to the treated one: the figures then show how the adjustment turns a difference-in-differences into a near simple difference.
+
+Three figures are drawn:
 
 | Figure | Content | Gap between curves |
 |------------------|------------------------|------------------------|
 | `pred_plot$change` | Predicted changes, both curves at 0 at the reference period | ATT |
 | `pred_plot$common` | Levels: treated anchor + predicted changes for both curves | ATT |
-| `pred_plot$group` | Levels: each group's own anchor + predicted changes | Period-adjusted baseline gap + ATT |
+| `pred_plot$group` | Levels: each group's own anchor + predicted changes | Adjusted baseline gap + ATT |
 
-With `prediction_se = TRUE`, standard errors come from cluster-level influence functions: IF(μ₁) for the treated, IF(μ₁) − IF(ATT) for the counterfactual (keeping their covariance), using the corrected IF(ATT) where it is available. In the common-anchor figure the anchor is treated as fixed (it shifts both curves jointly), so its confidence intervals are those of the changes; the group-anchor figure includes the anchors' sampling uncertainty. Overlapping intervals should not be read as a test of the gap: its standard error is that of the ATT in `est`.
+With `prediction_se = TRUE`, standard errors come from cluster-level influence functions: IF(μ₁) for the treated, IF(μ₁) − IF(ATT) for the counterfactual (keeping their covariance), using the corrected IF(ATT) where it is available. In the level figures, the coloured bars are those of the predicted changes, the anchors being held fixed. The uncertainty of the baseline gap is shown once, as a black bar on the control point at the reference period of the group-anchor figure, with the gap and its standard error in the caption; it includes the first-stage estimation (outcome regression and/or propensity score). `pred_anchor` reports the two anchors, the gap and its standard error.
+
+These figures illustrate what the estimator does. Inference on the effects relies on `est`: overlapping bars are not a test of the gap between curves, whose standard error is that of the ATT.
 
 ### Example
 

@@ -181,14 +181,16 @@
 #'       with one row per horizon and group (\code{dtreat} = 1: treated;
 #'       0: treated without treatment, i.e. the control counterfactual):
 #'       \code{estimate}/\code{se} (predicted change since the reference
-#'       period), \code{level_common}/\code{se_common} (level on the common
-#'       treated anchor; \code{se_common} treats the anchor as fixed and so
-#'       equals \code{se}) and \code{level_group}/\code{se_group} (level on the
-#'       group-specific anchors). The reference period is included with a
-#'       change of 0. Standard-error columns are \code{NA} unless
-#'       \code{prediction_se = TRUE}. \code{NULL} otherwise.}
-#'     \item{\code{pred_anchor}}{If \code{prediction = TRUE}, the two anchors
-#'       (baseline levels) and their standard errors. \code{NULL} otherwise.}
+#'       period), \code{level_common} (level on the common treated anchor)
+#'       and \code{level_group} (level on the group-specific anchors). The
+#'       reference period is included with a change of 0. \code{se} is
+#'       \code{NA} unless \code{prediction_se = TRUE}; it also applies to the
+#'       levels, the anchors being held fixed. \code{NULL} otherwise.}
+#'     \item{\code{pred_anchor}}{If \code{prediction = TRUE}, a one-row
+#'       \code{data.table} with the treated and control anchors (baseline
+#'       levels), the baseline gap (treated - control), its standard error
+#'       (if \code{prediction_se = TRUE}) and the adjustment used.
+#'       \code{NULL} otherwise.}
 #'     \item{\code{pred_plot}}{If \code{prediction = TRUE}, a list of three
 #'       \code{ggplot2} figures: \code{change} (no anchor), \code{common}
 #'       (common anchor) and \code{group} (group-specific anchors).
@@ -267,16 +269,33 @@
 #' treated, with and without treatment.
 #'
 #' Two anchors (levels at the reference period) are computed once, on the
-#' \eqn{h = 0} clean sample: the treated anchor is the weighted mean of the
-#' reference-period outcome among treated observations; the control anchor
-#' is the weighted mean of the same variable among controls, period by
-#' period, averaged with the treated observations' period shares (i.e.
-#' adjusted to the treated's period mix, but not for covariates). Periods
-#' with treated observations but no control are dropped from this average,
-#' with a warning. The common-anchor figure adds the treated anchor to both
-#' curves, so that the gap is the ATT; the group-anchor figure adds each
-#' group's own anchor, so that the gap is the period-adjusted baseline
-#' difference plus the ATT.
+#' \eqn{h = 0} clean sample, with the same weights, controls and fixed
+#' effects as the estimator at \eqn{h = 0}. The treated anchor is the weighted
+#' mean of the reference-period outcome among treated observations. The
+#' control anchor is the treated anchor minus the baseline gap, obtained by
+#' applying the method's own adjustment to the reference-period level instead
+#' of the change, so that it is the predicted baseline level of the controls
+#' for the treated's periods and covariates:
+#' \itemize{
+#'   \item \code{"lpdid"}, \code{"lpdid_rw"}, \code{"lpcsa"},
+#'     \code{"lpdid_adj"}: regression adjustment, i.e. an outcome regression
+#'     of the baseline level on period dummies and controls (and \code{FE}),
+#'     fitted on the controls and predicted for the treated;
+#'   \item \code{"lpdid_ipw"}, \code{"lpcsa_ipw"}: inverse probability
+#'     weighting, i.e. the method's propensity score, trimming and period
+#'     reweighting (odds-weighted control means within period, averaged with
+#'     the treated's period shares);
+#'   \item \code{"lpdid_dr"}: the doubly robust (AIPW) score on the level.
+#' }
+#' Without covariates, all methods give the same control anchor: the control
+#' mean of each period, averaged with the treated's period shares. Treated
+#' observations without prediction (period or fixed effect absent among
+#' controls) are dropped from the anchors, with a warning. The common-anchor
+#' figure adds the treated anchor to both curves, so that the gap between
+#' them is the ATT; the group-anchor figure adds each group's own anchor, so
+#' that the gap is the adjusted baseline gap plus the ATT. These figures
+#' illustrate what the estimator does; inference on the effects relies on
+#' \code{est}.
 #'
 #' With \code{prediction_se = TRUE}, standard errors are computed from
 #' cluster-level influence functions (first element of \code{clusters}, or
@@ -288,17 +307,19 @@
 #' even with \code{se_correction = FALSE}; \code{"lpdid_rw"} and
 #' \code{"lpdid_ipw"} only with \code{se_correction_rw_ipw = TRUE}) and the
 #' regression-score one otherwise; for the CSA methods the aggregation
-#' weights are treated as fixed, as in \code{fixest::aggregate()}. Level
-#' standard errors add the anchor's influence function, clusters being matched
-#' across the two samples, so the anchor's sampling uncertainty and its
-#' covariance with the predicted changes are included. This applies to the
-#' group-anchor levels only: in the common-anchor figure the anchor is the
-#' same constant for both curves, so its uncertainty shifts them jointly and
-#' says nothing about their comparison; it is treated as fixed there
-#' (\code{se_common} = \code{se}), and reported in \code{pred_anchor}. All prediction
-#' standard errors use the \eqn{G/(G-1)} small-sample factor; they can thus
-#' differ slightly from the ATT standard errors in \code{est}, which follow
-#' each method's own convention. Under heterogeneous effects, the
+#' weights are treated as fixed, as in \code{fixest::aggregate()}. In the
+#' level figures, the coloured bars are those of the changes, the anchors
+#' being held fixed: an anchor's sampling uncertainty shifts a whole curve
+#' and says little about the comparison over time. The uncertainty of the
+#' baseline gap is shown once, as a black bar on the control point at the
+#' reference period of the group-anchor figure; its standard error comes from
+#' the influence function of the adjustment, including the first stage
+#' (outcome regression and/or propensity score; trimming treated as fixed,
+#' same absorbed-\code{FE} caveat as above). All prediction standard errors
+#' use the \eqn{G/(G-1)} small-sample factor; they can thus differ slightly
+#' from the ATT standard errors in \code{est}, which follow each method's own
+#' convention. Overlapping bars are not a test of the gap between curves,
+#' whose standard error is that of the ATT. Under heterogeneous effects, the
 #' counterfactual curve inherits the estimand of each method (e.g.
 #' variance-weighted for \code{"lpdid"}).
 #'
@@ -796,7 +817,8 @@ lpdidcsa <- function(data,
   # the single-period guard and the time_x_controls check use it. With
   # time_x_controls, the RHS becomes factor(time)*(controls) when FE is NULL,
   # and (controls) + factor(time):(controls) | FE^time otherwise.
-  build_control_formula <- function(h, controls, FE, ctrl_df) {
+  build_control_formula <- function(h, controls, FE, ctrl_df, lhs_str = NULL) {
+    if (is.null(lhs_str)) lhs_str <- lhs(h)
     multi_time <- length(unique(ctrl_df[[col_time]])) > 1
     tx <- tx_apply(controls, FE, ctrl_df, time_absorbed = FALSE)
     controls <- tx$controls
@@ -806,9 +828,9 @@ lpdidcsa <- function(data,
     if (!is.null(controls)) rhs_terms <- c(rhs_terms, controls)
     rhs <- if (length(rhs_terms) > 0) paste(rhs_terms, collapse = " + ") else "1"
     if (!is.null(FE))
-      paste0(lhs(h), " ~ ", rhs, " | ", paste(FE, collapse = " + "))
+      paste0(lhs_str, " ~ ", rhs, " | ", paste(FE, collapse = " + "))
     else
-      paste0(lhs(h), " ~ ", rhs)
+      paste0(lhs_str, " ~ ", rhs)
   }
 
   # Model matrix of a fitted fixest model on new data, with exactly the
@@ -1492,68 +1514,144 @@ lpdidcsa <- function(data,
     make_pred(h, tm$mu1, att, tm$Phi, Phiatt)
   }
 
-  # Anchors at the reference period, on the h = 0 clean sample: treated mean
-  # of the reference outcome, and control mean adjusted to the treated's
-  # period mix. Returns levels and cluster-level IFs.
+  # Anchors at the reference period, on the h = 0 clean sample. The treated
+  # anchor is the weighted mean of the reference-period outcome among the
+  # treated. The control anchor is treated anchor - gap, where the gap is the
+  # method's own adjustment applied to the reference-period LEVEL instead of
+  # the change: regression adjustment (outcome regression on the controls,
+  # predicted for the treated) for lpdid, lpdid_rw, lpcsa and lpdid_adj; the
+  # final IPW regression (odds weights, period reweighting) for lpdid_ipw and
+  # lpcsa_ipw; the AIPW score for lpdid_dr. Returns the anchors, the gap and
+  # the gap's cluster-level influence function (first stages included).
   compute_anchors <- function() {
-    a_df <- clean_sample(df, 0)
-    wcol <- if (!is.null(weight)) weight else if (!is.null(weight_h)) var_at(0, weight_h) else NULL
-    if (!is.null(wcol)) a_df <- a_df[!is.na(get(wcol))]
+    h0 <- 0
+    a_df <- clean_sample(df, h0)
     if (nrow(a_df) == 0 || sum(a_df[[col_dtreat]]) == 0)
       stop("no treated observation in the h = 0 sample")
-    w  <- if (is.null(wcol)) rep(1, nrow(a_df)) else a_df[[wcol]]
-    D  <- a_df[[col_dtreat]]
-    y  <- a_df[[col_dep_ref]]
-    tt <- as.character(a_df[[col_time]])
-    cl <- a_df[[b_col_clusters[1]]]
 
-    S1    <- sum(w * D)
-    base1 <- sum(w * D * y) / S1
-    phi1  <- w * D * (y - base1) / S1
+    # Horizon-specific variables at h = 0, as in the estimation loops
+    cl_a <- b_col_clusters; ct_a <- b_controls; fe_a <- b_FE; w_a <- weight
+    if (!is.null(clusters_h)) cl_a <- c(b_col_clusters, var_at(h0, col_var = clusters_h))
+    if (!is.null(controls_h)) ct_a <- c(b_controls, var_at(h0, col_var = controls_h))
+    if (!is.null(FE_h))       fe_a <- c(b_FE, var_at(h0, col_var = FE_h))
+    if (!is.null(weight_h) && is.null(weight)) w_a <- var_at(h0, col_var = weight_h)
+    if (!is.null(w_a)) a_df <- a_df[!is.na(get(w_a))]
+    cl1 <- cl_a[1]
+    y_ref <- col_dep_ref
 
-    S1t <- tapply(w * D, tt, sum)
-    S0t <- tapply(w * (1 - D), tt, sum)
-    m0t <- tapply(w * (1 - D) * y, tt, sum) / S0t
-    ok  <- names(S1t)[S1t > 0 & S0t > 0]
-    if (length(ok) == 0) stop("no period with both treated and control observations")
-    if (any(S1t > 0 & !(names(S1t) %in% ok)))
-      warning("Control anchor: periods with treated but no control observation ",
-              "dropped (", paste(setdiff(names(S1t)[S1t > 0], ok), collapse = ", "), ").")
-    S1ok  <- sum(S1t[ok])
-    st    <- S1t[ok] / S1ok
-    base0 <- sum(st * m0t[ok])
+    tr_mean <- function(d) {
+      D <- d[[col_dtreat]]; w <- if (is.null(w_a)) rep(1, nrow(d)) else d[[w_a]]
+      treated_mean(matrix(D), w * D, d[[y_ref]], 1, d[[cl1]])
+    }
 
-    lk <- function(v) { x <- as.numeric(v[tt]); x[is.na(x) | !(tt %in% ok)] <- 0; x }
-    s_i <- lk(st); m_i <- lk(m0t); S0_i <- lk(S0t)
-    in_ok <- tt %in% ok
-    phi0 <- ifelse(in_ok & D == 0, w * s_i * (y - m_i) / S0_i, 0) +
-      ifelse(in_ok & D == 1, w * (m_i - base0) / S1ok, 0)
+    kind <- if (meth %in% c("lpdid_ipw", "lpcsa_ipw")) "ipw" else
+            if (meth == "lpdid_dr") "dr" else "ra"
 
-    list(base1 = base1, base0 = base0,
-         Phi1 = cl_sum(phi1, cl), Phi0 = cl_sum(phi0, cl))
+    if (kind == "ra") {
+      ctrl_df <- a_df[get(col_dtreat) == 0]
+      f_ctrl  <- build_control_formula(h0, ct_a, fe_a, ctrl_df, lhs_str = y_ref)
+      reg     <- fit_feols(f_ctrl, ctrl_df, cl_a, w_a)
+      trt_df  <- a_df[get(col_dtreat) == 1]
+      pr      <- predict(reg, newdata = trt_df)
+      if (anyNA(pr)) {
+        warning("Control anchor: ", sum(is.na(pr)), " treated observation(s) without ",
+                "prediction (period or fixed effect absent among controls) dropped.")
+        trt_df <- trt_df[!is.na(pr)]; pr <- pr[!is.na(pr)]
+      }
+      a_df  <- rbind(ctrl_df, trt_df)
+      tm    <- tr_mean(a_df)
+      wt    <- if (is.null(w_a)) rep(1, nrow(trt_df)) else trt_df[[w_a]]
+      e1    <- trt_df[[y_ref]] - pr
+      gap   <- sum(wt * e1) / sum(wt)
+      Phig  <- if (isTRUE(prediction_se))
+        ra_combined_se(reg, ctrl_df, trt_df, gap, e1, wt, cl1, return_if = TRUE)$Phi
+      how   <- "regression adjustment on the controls"
+    }
+
+    if (kind == "ipw") {
+      ps_mod <- fit_feglm(build_ps_formula(ct_a, fe_a, a_df), a_df, w_a)
+      a_df   <- drop_missing(a_df, ps_mod)
+      a_df[, ps := ps_mod$fitted.values]
+      a_df[, attwgt := fifelse(get(col_dtreat) == 1, 1, ps / (1 - ps))]
+      if (!is.null(w_a)) a_df[, attwgt := get(w_a) * attwgt]
+      ps_df <- a_df
+      a_df  <- a_df[get(col_dtreat) == 1 | ps < ps_trim]
+      a_df  <- add_rewgt(a_df, h0, col_w = "attwgt")
+      mod   <- feols(as.formula(paste0(y_ref, " ~ i(", col_dtreat, ") | ", col_time)),
+                     weights = a_df$rewgt_h, data = a_df, notes = FALSE)
+      k     <- grep(col_dtreat, names(coef(mod)), fixed = TRUE)[1]
+      gap   <- unname(coef(mod)[k])
+      tm    <- tr_mean(a_df)
+      Phig  <- if (isTRUE(prediction_se))
+        rw_ipw_combined_se(mod, a_df, a_df$attwgt, cl1, ps_mod = ps_mod,
+                           ps_df = ps_df, return_if = TRUE)$Phi_c
+      how   <- "inverse probability weighting"
+    }
+
+    if (kind == "dr") {
+      ps_mod <- fit_feglm(build_ps_formula(ct_a, fe_a, a_df), a_df, w_a)
+      a_df   <- drop_missing(a_df, ps_mod)
+      a_df[, ps := pmin(predict(ps_mod, newdata = a_df, type = "response"), 1 - 1e-6)]
+      a_df[, trim := (get(col_dtreat) == 1 | ps < ps_trim) * 1]
+      ctrl_idx <- which(a_df[[col_dtreat]] == 0)
+      ctrl_df  <- a_df[ctrl_idx, ]
+      reg <- fit_feols(build_control_formula(h0, ct_a, fe_a, ctrl_df, lhs_str = y_ref),
+                       ctrl_df, cl_a, w_a)
+      a_df[, mu0 := predict(reg, newdata = a_df)]
+      if (anyNA(a_df$mu0)) stop("outcome-model predictions missing for some observations")
+      iw <- if (!is.null(w_a)) a_df[[w_a]] / mean(a_df[[w_a]]) else rep(1, nrow(a_df))
+      a_df[, dy := get(y_ref)]
+      a_df[, w_treat := trim * get(col_dtreat) * iw]
+      a_df[, w_cont  := trim * (1 - get(col_dtreat)) * (ps / (1 - ps)) * iw]
+      eta1 <- a_df[, sum(w_treat * (dy - mu0)) / sum(w_treat)]
+      eta0 <- a_df[, sum(w_cont  * (dy - mu0)) / sum(w_cont)]
+      gap  <- eta1 - eta0
+      tm   <- tr_mean(a_df)
+      Phig <- if (isTRUE(prediction_se))
+        dr_combined_se(reg, ctrl_idx, ps_mod, a_df, a_df$w_treat, a_df$w_cont,
+                       a_df$dy, a_df$mu0, eta0, eta1, cl1, return_if = TRUE)$Phi
+      how  <- "doubly robust: outcome regression and inverse probability weighting"
+    }
+
+    has_cov <- length(ct_a) > 0 || length(fe_a) > 0
+    adj <- if (has_cov) paste0("period and covariates, ", how) else "period (no covariates)"
+    list(base1 = tm$mu1, base0 = tm$mu1 - gap, gap = gap, adj = adj,
+         se_gap = if (isTRUE(prediction_se)) se_cl(Phig) else NA_real_,
+         how = how)
   }
 
-  # One prediction figure: x = horizon, two groups, optional 95% CI
-  make_pred_plot <- function(dt, yvar, sevar, ylab, title, ci_caption = "95% CI") {
-    show_ci <- isTRUE(prediction_se) && any(!is.na(dt[[sevar]]))
+  # One prediction figure: x = horizon, two groups, optional 95% CI of the
+  # predicted changes (coloured bars). `gap`: optional one-row data.table
+  # (h, ymin, ymax) drawn at the reference period, on the control point, as a
+  # black bar (95% CI of the baseline gap).
+  make_pred_plot <- function(dt, yvar, ylab, title, caption = NULL, gap = NULL) {
+    show_ci <- isTRUE(prediction_se) && any(!is.na(dt$se))
     hs <- sort(unique(dt$h))
-    pd <- position_dodge(width = 0.3)
+    dw <- 0.3
+    pd <- position_dodge(width = dw)
     p <- ggplot(dt, aes(x = .data$h, y = .data[[yvar]],
                         colour = .data$group, shape = .data$group)) +
       geom_vline(xintercept = -0.5, colour = "red", linetype = "dashed") +
-      geom_line(position = pd) +
-      geom_point(size = 2, position = pd)
+      geom_line(position = pd)
     if (show_ci)
-      p <- p + geom_errorbar(aes(ymin = .data[[yvar]] - 1.96 * .data[[sevar]],
-                                 ymax = .data[[yvar]] + 1.96 * .data[[sevar]]),
+      p <- p + geom_errorbar(aes(ymin = .data[[yvar]] - 1.96 * .data$se,
+                                 ymax = .data[[yvar]] + 1.96 * .data$se),
                              width = 0, position = pd, na.rm = TRUE)
+    if (!is.null(gap) && show_ci && all(is.finite(c(gap$ymin, gap$ymax))))
+      # the control group is the second dodged group: x + dw/4
+      p <- p + geom_errorbar(data = gap,
+                             aes(x = .data$h + dw / 4, ymin = .data$ymin, ymax = .data$ymax),
+                             inherit.aes = FALSE, colour = "black",
+                             linewidth = 0.9, width = 0.12)
     p +
+      geom_point(size = 2, position = pd) +
       scale_x_continuous(breaks = hs,
                          minor_breaks = seq(min(hs) - 0.5, max(hs) + 0.5, by = 1)) +
       labs(x = "Horizon", y = ylab, title = title, colour = NULL, shape = NULL,
-           caption = if (show_ci) ci_caption else NULL) +
+           caption = caption) +
       theme_minimal() +
-      theme(panel.grid.major.x = element_blank(), legend.position = "bottom")
+      theme(panel.grid.major.x = element_blank(), legend.position = "bottom",
+            plot.caption = element_text(hjust = 0))
   }
 
   # ── Method dispatch ────────────────────────────────────────────────────────
@@ -2488,12 +2586,8 @@ lpdidcsa <- function(data,
       })
       b1 <- if (!is.null(anc)) anc$base1 else NA_real_
       b0 <- if (!is.null(anc)) anc$base0 else NA_real_
-      A1 <- if (!is.null(anc)) anc$Phi1
-      A0 <- if (!is.null(anc)) anc$Phi0
-
-      se_of  <- function(Phi) if (isTRUE(prediction_se) && !is.null(Phi)) se_cl(Phi) else NA_real_
-      plus   <- function(a, b) if (is.null(a) || is.null(b)) NULL else add_cl(a, b)
-      ref_h  <- -1L - anticipation
+      se_of <- function(Phi) if (isTRUE(prediction_se) && !is.null(Phi)) se_cl(Phi) else NA_real_
+      ref_h <- -1L - anticipation
 
       rows <- lapply(pred_store, function(p) data.table(
         h            = p$h,
@@ -2501,9 +2595,7 @@ lpdidcsa <- function(data,
         estimate     = c(p$mu1, p$mu0),
         se           = c(se_of(p$Phi1), se_of(p$Phi0)),
         level_common = b1 + c(p$mu1, p$mu0),
-        se_common    = c(se_of(p$Phi1), se_of(p$Phi0)),   # anchor treated as fixed
-        level_group  = c(b1 + p$mu1, b0 + p$mu0),
-        se_group     = c(se_of(plus(A1, p$Phi1)), se_of(plus(A0, p$Phi0)))
+        level_group  = c(b1 + p$mu1, b0 + p$mu0)
       ))
       ref_rows <- data.table(
         h            = ref_h,
@@ -2511,9 +2603,7 @@ lpdidcsa <- function(data,
         estimate     = 0,
         se           = if (isTRUE(prediction_se)) 0 else NA_real_,
         level_common = b1,
-        se_common    = if (isTRUE(prediction_se)) 0 else NA_real_,
-        level_group  = c(b1, b0),
-        se_group     = c(se_of(A1), se_of(A0))
+        level_group  = c(b1, b0)
       )
       did_pred <- rbindlist(c(rows, list(ref_rows)))
       did_pred[, h := as.numeric(h)]
@@ -2522,28 +2612,44 @@ lpdidcsa <- function(data,
       setcolorder(did_pred, c("h", "dtreat", "group"))
       setorder(did_pred, -dtreat, h)
 
-      did_pred_anchor <- data.table(
-        group  = factor(c("Treated", "Control"), levels = c("Treated", "Control")),
-        dtreat = c(1L, 0L),
-        anchor = c(b1, b0),
-        se     = c(se_of(A1), se_of(A0)),
-        sample = "h = 0 clean sample, reference period"
+      ci_txt <- "Coloured bars: 95% CI of the predicted changes (anchors held fixed)."
+      pred_plot <- list(
+        change = make_pred_plot(did_pred, "estimate",
+                                "Predicted change since reference period",
+                                "Predicted outcomes of the treated, with and without treatment",
+                                caption = if (isTRUE(prediction_se))
+                                  "Bars: 95% CI of the predicted changes.")
       )
 
-      pred_plot <- list(
-        change = make_pred_plot(did_pred, "estimate", "se",
-                                "Predicted change since reference period",
-                                "Predicted outcomes of the treated, with and without treatment")
-      )
       if (!is.null(anc)) {
-        pred_plot$common <- make_pred_plot(did_pred, "level_common", "se_common",
-                                           "Predicted level",
-                                           "Predicted levels, common anchor (treated baseline)",
-                                           "95% CI conditional on the anchor (same as for the changes)")
-        pred_plot$group  <- make_pred_plot(did_pred, "level_group", "se_group",
-                                           "Predicted level",
-                                           "Predicted levels, group anchors (period-adjusted baselines)",
-                                           "95% CI including the anchors' sampling uncertainty")
+        did_pred_anchor <- data.table(
+          anchor_treated = b1,
+          anchor_control = b0,
+          gap            = anc$gap,
+          se_gap         = anc$se_gap,
+          adjustment     = anc$adj,
+          sample         = "h = 0 clean sample, reference period"
+        )
+        pred_plot$common <- make_pred_plot(
+          did_pred, "level_common", "Predicted level",
+          "Predicted levels, common anchor (treated baseline)",
+          caption = if (isTRUE(prediction_se)) ci_txt)
+
+        gap_dt <- data.table(h = ref_h,
+                             ymin = b0 - 1.96 * anc$se_gap,
+                             ymax = b0 + 1.96 * anc$se_gap)
+        cap_group <- paste0(
+          "Control anchor adjusted for ", anc$adj, ".\n",
+          sprintf("Baseline gap (treated - control) = %.3f", anc$gap),
+          if (isTRUE(prediction_se) && is.finite(anc$se_gap))
+            sprintf(" (s.e. %.3f).", anc$se_gap) else ".",
+          if (isTRUE(prediction_se))
+            paste0("\n", ci_txt,
+                   "\nBlack bar at the reference period: 95% CI of the baseline gap."))
+        pred_plot$group <- make_pred_plot(
+          did_pred, "level_group", "Predicted level",
+          "Predicted levels, group anchors",
+          caption = cap_group, gap = gap_dt)
       }
     }
   }
