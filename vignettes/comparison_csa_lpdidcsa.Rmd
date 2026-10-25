@@ -15,7 +15,7 @@ knitr::opts_chunk$set(error = TRUE, message = FALSE, warning = FALSE)
 
 # Introduction
 
-This vignette shows how to use the `lpdidcsa` package for difference-in-differences (DiD) estimation and compares its results with those from the `did` package by Callaway and Sant'Anna. We focus on two estimation methods: inverse probability weighting (IPW) and adjusted regression. Additionally, we explore how `lpdidcsa` handles missing observations, showcasing its partial rebalancing approach.
+This vignette shows how to use the `lpdidcsa` package for difference-in-differences (DiD) estimation and compares its results with those from the `did` package by Callaway and Sant'Anna. We focus on two estimation methods: inverse probability weighting (IPW) and regression adjustment. Additionally, we explore how `lpdidcsa` handles missing values, showcasing its pair rebalancing approach.
 
 # Setup
 
@@ -68,7 +68,7 @@ ggdid(csa_ipw)
 
 ### Using `lpdidcsa` Package
 
-To obtain equivalent results to those of the `did` package, we interact covariates with time dummy variables.
+To obtain equivalent results to those of the `did` package, we use the option time_x_controls which interacts covariates with time dummy variables.
 
 ```{r ipw-did}
 lpdidcsa_ipw <- lpdidcsa(
@@ -78,7 +78,9 @@ lpdidcsa_ipw <- lpdidcsa(
   time = "year",
   unit = "countyreal",
   dependent = "lemp",
-  controls = "lpop*i(year)"
+  controls = "lpop",
+  time_x_controls = T,
+  se_correction_rw_ipw= T
 )
 lpdidcsa_ipw$plot
 ```
@@ -89,10 +91,10 @@ lpdidcsa_ipw$plot
 cbind(
   csa_ipw$att.egt[csa_ipw$att.egt != 0],
   csa_ipw$se.egt[csa_ipw$att.egt != 0]
-) - lpdidcsa_ipw$est[lpdidcsa_ipw$est$estimate != 0, c("estimate", "se")]
+) - lpdidcsa_ipw$est[lpdidcsa_ipw$est$estimate != 0, c("estimate", "se_correct")]
 ```
 
-## Adjusted Regression
+## Regression adjustment
 
 ### Using `did` Package
 
@@ -118,7 +120,7 @@ ggdid(csa_adj)
 
 ### Using `lpdidcsa` Package
 
-Here again, to obtain equivalent results to those of the `did` package, we interact covariates with time dummy variables.
+Here again, to obtain equivalent results to those of the `did` package, we use the option time_x_controls which interacts covariates with time dummy variables.
 
 ```{r adj-lpdidcsa}
 lpdidcsa_adj <- lpdidcsa(
@@ -128,7 +130,8 @@ lpdidcsa_adj <- lpdidcsa(
   time = "year",
   unit = "countyreal",
   dependent = "lemp",
-  controls = "lpop*i(year)",
+  controls = "lpop",
+  time_x_controls = T,
   type_horizon = "wide"
 )
 lpdidcsa_adj$plot
@@ -140,20 +143,71 @@ lpdidcsa_adj$plot
 cbind(
   csa_adj$att.egt[csa_adj$att.egt != 0],
   csa_adj$se.egt[csa_adj$att.egt != 0]
-) - lpdidcsa_adj$est[lpdidcsa_adj$est$estimate != 0, c("estimate", "se")]
+) - lpdidcsa_adj$est[lpdidcsa_adj$est$estimate != 0, c("estimate", "se_correct")]
 ```
 
-# Handling Missing Observations
+## Double Robust
 
-## Creating a Dataset with Missing Observations
+### Using `did` Package
+
+```{r dr-did}
+csa_adj_det <- att_gt(
+  yname = "lemp",
+  tname = "year",
+  idname = "countyreal",
+  gname = "first.treat",
+  base_period = "universal",
+  control_group = c("notyettreated"),
+  est_method = "dr",
+  bstrap = FALSE,
+  cband = FALSE,
+  xformla = ~lpop,
+  data = mpdta
+)
+# summary(csa_adj_det)
+csa_dr <- aggte(csa_adj_det, type = "dynamic")
+# summary(csa_adj)
+ggdid(csa_dr)
+```
+
+### Using `lpdidcsa` Package
+
+Here again, to obtain equivalent results to those of the `did` package, we use the option time_x_controls which interacts covariates with time dummy variables.
+
+```{r dr-lpdidcsa}
+lpdidcsa_dr <- lpdidcsa(
+  data = mpdta_w,
+  meth = "lpdid_dr",
+  dtreat = "dtreat",
+  time = "year",
+  unit = "countyreal",
+  dependent = "lemp",
+  controls = "lpop",
+  time_x_controls = T,
+  type_horizon = "wide"
+)
+lpdidcsa_dr$plot
+```
+
+### Comparison of Results
+
+```{r dr-comparison}
+cbind(
+  csa_dr$att.egt[csa_adj$att.egt != 0],
+  csa_dr$se.egt[csa_adj$att.egt != 0]
+) - lpdidcsa_dr$est[lpdidcsa_adj$est$estimate != 0, c("estimate", "se_correct")]
+```
+
+# Handling Missing Values
+
+## Creating a Dataset with Missing Values on the dependent variable
 
 ```{r missing-data}
 set.seed(444)
 mpdta_r[, noise := runif(nrow(mpdta_r))]
 mpdta_r[, drop := 1 - (noise > 0.1)]
-mpdta_na <- mpdta_r[drop == 0, ]
-# nrow(mpdta_na)
-mpdta_na[, rebal := (sum(!is.na(year)) == 5) * 1, by = countyreal]
+mpdta_r[, lemp_mis := fifelse(drop==1,NA,lemp)]
+mpdta_r[, rebal := (sum(!is.na(lemp_mis)) == 5) * 1, by = countyreal]
 # mpdta_na[,.N, by = rebal]
 ```
 
@@ -163,7 +217,7 @@ mpdta_na[, rebal := (sum(!is.na(year)) == 5) * 1, by = countyreal]
 
 ```{r unbalanced-did}
 csa_unbal_det <- att_gt(
-  yname = "lemp",
+  yname = "lemp_mis",
   tname = "year",
   idname = "countyreal",
   gname = "first.treat",
@@ -172,7 +226,7 @@ csa_unbal_det <- att_gt(
   control_group = c("notyettreated"),
   bstrap = FALSE,
   cband = FALSE,
-  data = mpdta_na
+  data = mpdta_r
 )
 # summary(csa_unbal_det)
 csa_unbal <- aggte(csa_unbal_det, type = "dynamic")
@@ -183,26 +237,26 @@ ggdid(csa_unbal)
 ### Using `lpdidcsa` Package with Partial Rebalancing
 
 ```{r partial-rebalancing}
-mpdta_na_w <- lpdidcsa_data(
-  data = mpdta_na,
+mpdta_r_mis_w <- lpdidcsa_data(
+  data = mpdta_r,
   treat = "treat",
-  dependent = "lemp",
+  dependent = "lemp_mis",
   unit = "countyreal",
   type_horizon = "wide"
 )
 didpartbal <- lpdidcsa(
-  data = mpdta_na_w,
+  data = mpdta_r_mis_w,
   meth = "lpdid_rw",
   dtreat = "dtreat",
   time = "year",
   unit = "countyreal",
-  dependent = "lemp",
+  dependent = "lemp_mis",
   type_horizon = "wide"
 )
 didpartbal$plot
 ```
 
-## Comparison of Results with Missing Observations
+## Comparison of Results with Missing Values
 
 ```{r missing-comparison}
 # Difference between CSA's unbalanced estimate and lpdidcsa partially rebalanced estimate
@@ -213,7 +267,7 @@ cbind(
 
 # Difference between CSA's rebalanced estimate and lpdidcsa partially rebalanced estimate
 csa_rebal_det <- att_gt(
-  yname = "lemp",
+  yname = "lemp_mis",
   tname = "year",
   idname = "countyreal",
   gname = "first.treat",
@@ -222,7 +276,7 @@ csa_rebal_det <- att_gt(
   control_group = c("notyettreated"),
   bstrap = FALSE,
   cband = FALSE,
-  data = mpdta_na
+  data = mpdta_r
 )
 csa_rebal <- aggte(csa_rebal_det, type = "dynamic")
 cbind(
@@ -233,7 +287,7 @@ cbind(
 
 # Conclusion
 
-This vignette demonstrates the use of the `lpdidcsa` package for DiD estimation and compares its results with the `did` package. The `lpdidcsa` package offers a robust approach to handling missing observations through partial rebalancing, which can yield estimates closer to the "true" values without significant loss of power.
+This vignette demonstrates the use of the `lpdidcsa` package for DiD estimation and compares its results with the `did` package in R. The `lpdidcsa` package offers a robust approach to handling missing values through pair rebalancing, which can yield estimates closer to the "true" values without significant loss of power. (Pair balancing is also available in Callaway and Sant'Anna's Stata package csdid. This option is not yet available in R. Here, it gives the same result as LPDiD).
 
 For further details, refer to the package documentation and the original papers by Callaway and Sant'Anna, and the methodology behind `lpdidcsa`.
 
