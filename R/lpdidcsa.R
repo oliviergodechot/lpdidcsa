@@ -94,13 +94,13 @@
 #' @param se_correction Logical. If \code{TRUE} (default) and
 #'   \code{meth \%in\% c("lpdid_adj","lpdid_dr")}, computes a corrected
 #'   standard error (\code{se_correct} column) via a cluster-level combined
-#'   influence function, in addition to the naive standard error
+#'   influence function, in addition to the uncorrected standard error
 #'   (\code{se} column). The correction propagates the estimation
 #'   uncertainty of the first-stage nuisance model(s) (outcome regression
 #'   for RA; outcome regression and propensity score for DR) into the final
 #'   ATT's standard error, and has been validated to reproduce
 #'   \code{lpdid.ado}'s \code{listreg}-based RA standard error exactly on a
-#'   test panel. If \code{FALSE}, only the naive standard error is computed,
+#'   test panel. If \code{FALSE}, only the uncorrected standard error is computed,
 #'   which is faster on large datasets since it skips the additional
 #'   \code{sandwich::estfun()}/\code{bread()} calls (no extra model refits
 #'   are involved either way). Ignored for all other methods.
@@ -176,7 +176,7 @@
 #'       \code{"lpdid_dr"} only.}
 #'     \item{\code{plot}}{A \code{ggplot2} event study plot with 95\%
 #'       confidence intervals, built from \code{se_correct} where it has
-#'       been computed and from the naive \code{se} otherwise.}
+#'       been computed and from the uncorrected \code{se} otherwise.}
 #'     \item{\code{pred}}{If \code{prediction = TRUE}, a \code{data.table}
 #'       with one row per horizon and group (\code{dtreat} = 1: treated;
 #'       0: treated without treatment, i.e. the control counterfactual):
@@ -203,11 +203,7 @@
 #' influence function for its standard error, replacing the previous
 #' \code{marginaleffects::avg_comparisons()}-based implementation. This
 #' correctly accounts for the cross-cluster covariance between the
-#' control-fitting stage and the treated-outcome stage, which a naive
-#' additive \code{V_naive + V_extra} formula would omit whenever the same
-#' cluster (e.g. the same unit) contributes both a clean-control observation
-#' and its own treated observation within a horizon's estimation sample --
-#' the typical case in a staggered-adoption panel. \code{one_reg = TRUE} is
+#' control-fitting stage and the treated-outcome stage. \code{one_reg = TRUE} is
 #' no longer supported for \code{"lpdid_adj"}, since the corresponding
 #' influence-function derivation for the stacked one-regression case has not
 #' been validated; use \code{one_reg = FALSE}.
@@ -235,7 +231,7 @@
 #' treated observations in period \eqn{t} and \eqn{b_i} is the survey weight
 #' (\code{"lpdid_rw"}) or the survey weight times the ATT-IPW weight
 #' (1 for treated, \eqn{\hat p/(1-\hat p)} for controls; \code{"lpdid_ipw"}).
-#' The naive \code{se} treats \eqn{w_i} as known. With
+#' The uncorrected \code{se} treats \eqn{w_i} as known. With
 #' \code{se_correction_rw_ipw = TRUE}, \code{se_correct} adds to each
 #' observation's WLS score \eqn{s_i} the first-order effect of estimating
 #' the nuisance parameters: \eqn{G_t\, b_j (D_j - q_t)/\sum_{t} b} with
@@ -399,7 +395,7 @@
 #' #    with the corrected standard error
 #' res <- lpdidcsa(df, unit = "countyreal", time = "year",
 #'                 dependent = "lemp", meth = "lpdid_adj", controls = "lpop")
-#' print(res$est)   # includes both se (naive) and se_correct
+#' print(res$est)   # includes both se (uncorrected) and se_correct
 #' print(res$or)    # first-step outcome regression on the control group
 #'
 #' # 6. Same, but skipping the SE correction for speed on large data
@@ -1969,7 +1965,7 @@ lpdidcsa <- function(data,
 
         formula_adj <- paste0("(", dep_at(h), "-", col_dep_ref, "-predicted_no_treat) ~ 1")
         did_adj <- fit_feols(formula_adj, trt_df, col_clusters, col_weight)
-        se_naive <- did_adj$coeftable[1, "Std. Error"]
+        se_uncorrected <- did_adj$coeftable[1, "Std. Error"]
 
         # The combined IF is also needed for the prediction SEs
         ra_res <- NULL
@@ -1998,9 +1994,9 @@ lpdidcsa <- function(data,
 
         est <- data.table(
           h = h, variable = col_dtreat, estimate = att_hat,
-          se = se_naive, se_correct = se_correct,
-          T = att_hat / se_naive,
-          pvalue = 2 * pnorm(-abs(att_hat / se_naive)),
+          se = se_uncorrected, se_correct = se_correct,
+          T = att_hat / se_uncorrected,
+          pvalue = 2 * pnorm(-abs(att_hat / se_uncorrected)),
           n_obs = did_adj$nobs, formula = formula_adj,   # final stage; first stage in $or
           clusters = col_clusters[1]
         )
@@ -2079,7 +2075,7 @@ lpdidcsa <- function(data,
         clean_df[, treat_hat := (w_treat * (dy - mu0)) / mean(w_treat)]
         clean_df[, cont_hat  := (w_cont  * (dy - mu0)) / mean(w_cont)]
         did_dr <- fit_feols("(treat_hat - cont_hat) ~ 1", clean_df, col_clusters, NULL)
-        se_naive <- did_dr$coeftable[1, "Std. Error"]
+        se_uncorrected <- did_dr$coeftable[1, "Std. Error"]
 
         # The combined IF is also needed for the prediction SEs
         dr_res <- NULL
@@ -2108,9 +2104,9 @@ lpdidcsa <- function(data,
 
         est <- data.table(
           h = h, variable = col_dtreat, estimate = att_hat,
-          se = se_naive, se_correct = se_correct,
-          T = att_hat / se_naive,
-          pvalue = 2 * pnorm(-abs(att_hat / se_naive)),
+          se = se_uncorrected, se_correct = se_correct,
+          T = att_hat / se_uncorrected,
+          pvalue = 2 * pnorm(-abs(att_hat / se_uncorrected)),
           n_obs = did_dr$nobs,
           formula = "(treat_hat - cont_hat) ~ 1",   # final stage; first stages in $or and $ps
           clusters = col_clusters[1]
@@ -2573,11 +2569,11 @@ lpdidcsa <- function(data,
   ddplot <- rbind(ddplot, ref_row, fill = TRUE)
 
   # Confidence intervals from the corrected SE where it was estimated,
-  # from the naive (default) SE otherwise
+  # from the uncorrected (default) SE otherwise
   if (!"se_correct" %in% names(ddplot)) ddplot[, se_correct := NA_real_]
   ddplot[, se_plot := fifelse(!is.na(se_correct), se_correct, se)]
   plot_caption <- if (ddplot[h != -1L - anticipation, any(!is.na(se_correct))])
-    "95% CI from corrected standard errors" else "95% CI from naive standard errors"
+    "95% CI from corrected standard errors" else "95% CI from uncorrected standard errors"
 
   plotdid <- ggplot(ddplot, aes(x = h, y = estimate)) +
     geom_hline(yintercept = 0,    colour = "grey70") +

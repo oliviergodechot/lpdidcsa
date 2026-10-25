@@ -32,7 +32,7 @@ format(object.size(toydata),units="Mb")
 toydata <- toydata[,list(id,t,firm_id,female,treat,log_earnings,g_i)]
 toydata[,g_i:=fifelse(is.na(g_i),0,g_i)]
 
-
+nrow(toydata)
 
 n_it <- 10
 
@@ -77,7 +77,7 @@ write.csv(all,"bench.csv",row.names = F)
 
 
 # Function for benchmarking the methods with  bench::mark & tryCatch
-bench_method <- function(df, method, par_type_horizon, par_one_reg, control = "female", min_iterations = 3) {
+bench_method <- function(df, method, par_type_horizon, par_one_reg, correct =T, interact, control = "female", min_iterations = 3) {
   tryCatch({
     result <- bench::mark(
       {
@@ -88,6 +88,9 @@ bench_method <- function(df, method, par_type_horizon, par_one_reg, control = "f
           meth = method,
           controls = control,
           type_horizon = par_type_horizon,
+          se_correction = correct,
+          se_correction_rw_ipw = correct,
+          time_x_controls = interact,
           one_reg = par_one_reg
         )
       },
@@ -112,16 +115,18 @@ bench_method <- function(df, method, par_type_horizon, par_one_reg, control = "f
 
 
 
-## Wide ----
-methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw")
+## Wide no SE correction ----
+methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw","lpdid_adj","lpdid_dr")
 results <- list()
 for (method in methods) {
   cat("Benchmarking method:", method, "\n")
   results[[method]] <- bench_method(
     df = df,
     method = method,
+    correct = F,
     par_type_horizon = "wide",
     par_one_reg = FALSE,
+    interact=FALSE,
     min_iterations = n_it
   )
 }
@@ -130,49 +135,25 @@ for (method in methods) {
 results_df <- rbindlist(results, idcol = "method")
 results_df$format <- "wide"
 results_df$one_reg <- FALSE
+results_df$se_correct <- FALSE
 
 all <- rbind(all,results_df,fill=T)
 all
 write.csv(all,"bench.csv",row.names = F)
 gc()
 
-### Wide method adj----
-methods <- c("lpdid_adj")
-results <- list()
-for (method in methods) {
-  cat("Benchmarking method:", method, "\n")
-  results[[method]] <- bench_method(
-    df = df,
-    method = method,
-    par_type_horizon = "wide",  
-    par_one_reg = FALSE,
-    min_iterations = 2
-  )
-}
-
-# Display results
-results_df_adj <- rbindlist(results, idcol = "method")
-print(results_df_adj[, .(method, median_time,  iterations)])
-
-results_df_adj$format <- "wide"
-results_df_adj$one_reg <- FALSE
-
-all <- rbind(all,results_df_adj,fill=T)
-all
-write.csv(all,"bench.csv",row.names = F)
-gc()
-
 
 ### Wide interacted ----
-methods <- c("lpdid_ipw","lpcsa_ipw")
+methods <- c("lpdid_ipw","lpcsa_ipw","lpdid_adj","lpdid_dr")
 results <- list()
 for (method in methods) {
   cat("Benchmarking method:", method, "\n")
   results[[method]] <- bench_method(
     df = df,
     method = method,
+    correct = F,
     par_type_horizon = "wide",  # ou "long"
-    control="female:i(t)",
+    interact=T,
     par_one_reg = FALSE,
     min_iterations = n_it
   )
@@ -184,6 +165,62 @@ print(results_df_int[, .(method, median_time,  iterations)])
 
 results_df_int$format <- "wide"
 results_df_int$one_reg <- FALSE
+results_df_int$se_correct <- FALSE
+
+all <- rbind(all,results_df_int,fill=T)
+all
+
+write.csv(all,"bench.csv",row.names = F)
+
+## Wide ----
+methods <- c("lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw","lpdid_adj","lpdid_dr")
+results <- list()
+for (method in methods) {
+  cat("Benchmarking method:", method, "\n")
+  results[[method]] <- bench_method(
+    df = df,
+    method = method,
+    par_type_horizon = "wide",
+    par_one_reg = FALSE,
+    interact=FALSE,
+    min_iterations = n_it
+  )
+}
+
+# Display results
+results_df <- rbindlist(results, idcol = "method")
+results_df$format <- "wide"
+results_df$one_reg <- FALSE
+results_df$se_correct <- TRUE
+
+all <- rbind(all,results_df,fill=T)
+all
+write.csv(all,"bench.csv",row.names = F)
+gc()
+
+
+### Wide interacted ----
+methods <- c("lpdid_ipw","lpcsa_ipw","lpdid_adj","lpdid_dr")
+results <- list()
+for (method in methods) {
+  cat("Benchmarking method:", method, "\n")
+  results[[method]] <- bench_method(
+    df = df,
+    method = method,
+    par_type_horizon = "wide",  # ou "long"
+    interact=T,
+    par_one_reg = FALSE,
+    min_iterations = n_it
+  )
+}
+
+# Display results
+results_df_int <- rbindlist(results, idcol = "method")
+print(results_df_int[, .(method, median_time,  iterations)])
+
+results_df_int$format <- "wide"
+results_df_int$one_reg <- FALSE
+results_df_int$se_correct <- TRUE
 
 all <- rbind(all,results_df_int,fill=T)
 all
@@ -201,6 +238,7 @@ time_csa_ipw <- bench::mark({csa_ipw_det <- att_gt(yname="log_earnings",
                                                    bstrap = FALSE,
                                                    cband = FALSE,
                                                    xformla=~female,
+                                                   faster_mode=T,
                                                    data=toydata)
 csa_ipw <- aggte(csa_ipw_det, type = "dynamic")},
 iterations = n_it,
@@ -235,6 +273,7 @@ time_csa_reg <- bench::mark({csa_reg_det <- att_gt(yname="log_earnings",
                                                    est_method="reg",
                                                    bstrap = FALSE,
                                                    cband = FALSE,
+                                                   faster_mode=T,
                                                    xformla=~female,
                                                    data=toydata)
 csa_reg <- aggte(csa_reg_det, type = "dynamic")},
@@ -251,6 +290,39 @@ speed <- data.table(
   min_time = min(unlist(time_csa_reg$time)),
   max_time = max(unlist(time_csa_reg$time)),
   iterations = time_csa_reg$n_itr)
+speed
+
+all <- rbind(all,speed,fill=T)
+all
+write.csv(all,"bench.csv",row.names = F)
+
+## CSA dr ----
+time_csa_dr <- bench::mark({csa_dr_det <- att_gt(yname="log_earnings",
+                                                   tname="t",
+                                                   idname="id",
+                                                   gname="g_i",
+                                                   base_period="universal",
+                                                   control_group = c("notyettreated"),
+                                                   est_method="dr",
+                                                   bstrap = FALSE,
+                                                   cband = FALSE,
+                                                   faster_mode = T,
+                                                   xformla=~female,
+                                                   data=toydata)
+csa_dr <- aggte(csa_dr_det, type = "dynamic")},
+iterations = n_it,
+check = FALSE,
+memory = FALSE)    
+rm(csa_dr,csa_dr_det)
+
+speed <- data.table(
+  method = "csa dr",
+  format = NA,
+  one_reg = NA,
+  median_time = time_csa_dr$median,  
+  min_time = min(unlist(time_csa_dr$time)),
+  max_time = max(unlist(time_csa_dr$time)),
+  iterations = time_csa_dr$n_itr)
 speed
 
 all <- rbind(all,speed,fill=T)
@@ -299,7 +371,7 @@ write.csv(all,"bench.csv",row.names = F)
 
 
 ## Long multiple regressions ----
-methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw")
+methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw","lpcsa_adj","lpcsa_dr")
 results <- list()
 for (method in methods) {
   cat("Benchmarking méthode:", method, "\n")
@@ -307,6 +379,7 @@ for (method in methods) {
     df = df_l,
     method = method,
     par_type_horizon = "long",  # ou "long"
+    interact=FALSE,
     par_one_reg = FALSE,
     min_iterations = n_it
   )
@@ -318,6 +391,7 @@ print(results_df_l[, .(method, median_time,  iterations)])
 
 results_df_l$format <- "long"
 results_df_l$one_reg <- FALSE
+results_df_l$se_correct <- TRUE
 
 all <- rbind(all,results_df_l,fill=T)
 all
@@ -326,7 +400,7 @@ write.csv(all,"bench.csv",row.names = F)
 gc()
 
 ## Long and 1 regressions ----
-n_it <- 3
+n_it <- 5
 methods <- c("lpdid", "lpdid_rw", "lpdid_ipw","lpcsa","lpcsa_ipw")
 results <- list()
 for (method in methods) {
@@ -334,6 +408,7 @@ for (method in methods) {
   results[[method]] <- bench_method(
     df = df_l,
     method = method,
+    interact=FALSE,
     par_type_horizon = "long",
     par_one_reg = TRUE,
     min_iterations = n_it
@@ -346,6 +421,7 @@ print(results_df_l1[, .(method, median_time,  iterations)])
 
 results_df_l1$format <- "long"
 results_df_l1$one_reg <- TRUE
+results_df_l1$se_correct <- TRUE
 
 all <- rbind(all,results_df_l1,fill=T)
 all
@@ -414,8 +490,8 @@ speed
 all <- rbind(all,speed,fill=T)
 write.csv(all,"bench_big.csv",row.names = F)
 
-## Wide ----
-methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw")
+## Wide no SE correction ----
+methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw","lpcsa_adj","lpcsa_dr")
 results <- list()
 for (method in methods) {
   cat("Benchmarking method:", method, "\n")
@@ -423,6 +499,8 @@ for (method in methods) {
     df = df,
     method = method,
     par_type_horizon = "wide",
+    interact = F,
+    correct = F,
     par_one_reg = FALSE,
     min_iterations = n_it
   )
@@ -430,6 +508,7 @@ for (method in methods) {
 
 # Display results
 results_df <- rbindlist(results, idcol = "method")
+results_df$se_correct <- F
 
 all <- rbind(all,results_df,fill=T)
 all
@@ -438,7 +517,7 @@ gc()
 
 
 ### Wide interacted ----
-methods <- c("lpdid_ipw","lpcsa_ipw")
+methods <- c("lpdid_ipw","lpcsa_ipw","lpdid_adj","lpdid_dr")
 results <- list()
 for (method in methods) {
   cat("Benchmarking method:", method, "\n")
@@ -446,13 +525,15 @@ for (method in methods) {
     df = df,
     method = method,
     par_type_horizon = "wide",  # ou "long"
-    control="female:i(t)",
+    interact = T,
+    correct = F,
     par_one_reg = FALSE,
     min_iterations = n_it
   )
 }
 
 results_df_int <- rbindlist(results, idcol = "method")
+results_df_int$se_correct <- F
 print(results_df_int[, .(method, median_time,  iterations)])
 
 all <- rbind(all,results_df_int,fill=T)
@@ -460,7 +541,57 @@ all
 
 write.csv(all,"bench_big.csv",row.names = F)
 
-n_it <- 2 
+
+
+## Wide ----
+methods <- c("lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw","lpcsa_adj","lpcsa_dr")
+results <- list()
+for (method in methods) {
+  cat("Benchmarking method:", method, "\n")
+  results[[method]] <- bench_method(
+    df = df,
+    method = method,
+    par_type_horizon = "wide",
+    interact = F,
+    par_one_reg = FALSE,
+    min_iterations = n_it
+  )
+}
+
+# Display results
+results_df <- rbindlist(results, idcol = "method")
+results_df$se_correct <- T
+
+all <- rbind(all,results_df,fill=T)
+all
+write.csv(all,"bench_big.csv",row.names = F)
+gc()
+
+
+### Wide interacted ----
+methods <- c("lpdid_ipw","lpcsa_ipw","lpdid_adj","lpdid_dr")
+results <- list()
+for (method in methods) {
+  cat("Benchmarking method:", method, "\n")
+  results[[method]] <- bench_method(
+    df = df,
+    method = method,
+    par_type_horizon = "wide",  # ou "long"
+    interact = T,
+    par_one_reg = FALSE,
+    min_iterations = n_it
+  )
+}
+
+results_df_int <- rbindlist(results, idcol = "method")
+results_df_int$se_correct <- T
+print(results_df_int[, .(method, median_time,  iterations)])
+
+all <- rbind(all,results_df_int,fill=T)
+all
+
+write.csv(all,"bench_big.csv",row.names = F)
+
 
 ## CSA ipw ----
 time_csa_ipw <- bench::mark({csa_ipw_det <- att_gt(yname="log_earnings",
@@ -472,6 +603,7 @@ time_csa_ipw <- bench::mark({csa_ipw_det <- att_gt(yname="log_earnings",
                                                    est_method="ipw",
                                                    bstrap = FALSE,
                                                    cband = FALSE,
+                                                   faster_mode=T,
                                                    xformla=~female,
                                                    data=toydata)
 csa_ipw <- aggte(csa_ipw_det, type = "dynamic")},
@@ -505,6 +637,7 @@ time_csa_reg <- bench::mark({csa_reg_det <- att_gt(yname="log_earnings",
                                                    est_method="reg",
                                                    bstrap = FALSE,
                                                    cband = FALSE,
+                                                   faster_mode=T,
                                                    xformla=~female,
                                                    data=toydata)
 csa_reg <- aggte(csa_reg_det, type = "dynamic")},
@@ -524,6 +657,41 @@ speed
 all <- rbind(all,speed,fill=T)
 all
 write.csv(all,"bench_big.csv",row.names = F)
+gc()
+
+## CSA dr ----
+time_csa_dr <- bench::mark({csa_dr_det <- att_gt(yname="log_earnings",
+                                                 tname="t",
+                                                 idname="id",
+                                                 gname="g_i",
+                                                 base_period="universal",
+                                                 control_group = c("notyettreated"),
+                                                 est_method="dr",
+                                                 bstrap = FALSE,
+                                                 cband = FALSE,
+                                                 faster_mode = T,
+                                                 xformla=~female,
+                                                 data=toydata)
+csa_dr <- aggte(csa_dr_det, type = "dynamic")},
+iterations = n_it,
+check = FALSE,
+memory = FALSE)    
+rm(csa_dr,csa_dr_det)
+
+speed <- data.table(
+  method = "csa dr",
+  format = NA,
+  one_reg = NA,
+  median_time = time_csa_dr$median,  
+  min_time = min(unlist(time_csa_dr$time)),
+  max_time = max(unlist(time_csa_dr$time)),
+  iterations = time_csa_dr$n_itr)
+speed
+
+all <- rbind(all,speed,fill=T)
+all
+write.csv(all,"bench_big.csv",row.names = F)
+
 gc()
 
 
