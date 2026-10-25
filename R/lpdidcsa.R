@@ -555,12 +555,12 @@ lpdidcsa <- function(data,
 
   # Determine the available horizon range from the data
   if (type_horizon == "wide") {
-    col_dep_all <- colnames(df)[substr(colnames(df), 1, nchar(dependent) + 1) ==
-                                  paste0(dependent, "_")]
-    time_dep    <- as.numeric(gsub("m", "-",
-                                   substr(col_dep_all,
-                                          nchar(dependent) + 3,
-                                          nchar(col_dep_all))))
+    pre  <- paste0(dependent, "_t")
+    nm   <- colnames(df)
+    col_dep_all <- nm[startsWith(nm, pre) &
+                        grepl("^m?[0-9]+$", substring(nm, nchar(pre) + 1))]
+    time_dep <- as.numeric(sub("^m", "-", substring(col_dep_all, nchar(pre) + 1)))
+
     max_n_pre  <- -min(time_dep)
     max_n_post <- max(time_dep)
 

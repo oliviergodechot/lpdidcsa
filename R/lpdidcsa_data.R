@@ -12,6 +12,17 @@
 #' @param time Character. Name of the time period column (default:
 #'   \code{"year"}). Must be on a regular grid with unit step (e.g. years).
 #' @param dependent Character. Name of the dependent variable column.
+#' @param treat Character or \code{NULL} (default). Name of the binary
+#'   treatment indicator column (0, 1 or \code{NA}). At least one of
+#'   \code{treat} and \code{last_treat} must be supplied; \code{last_treat}
+#'   is recommended, as it is robust to missing periods. Treatment onsets are
+#'   defined as switches from 0 to 1 between two consecutive periods, so that
+#'   \code{treat} can be either a status (1 as long as the unit is treated) or
+#'   a one-period event indicator. When \code{last_treat} is also supplied,
+#'   \code{treat} is only used for consistency checks and, if
+#'   \code{absorbing = FALSE}, to exclude periods of ongoing treatment (see
+#'   Details): with a treatment status and \code{absorbing = FALSE}, supply
+#'   both.
 #' @param last_treat Character or \code{NULL} (default). Name of a column
 #'   giving the period of the most recent treatment onset known at \emph{t}
 #'   (\code{NA} if the unit has not been treated yet), e.g. the birth year of
@@ -22,14 +33,6 @@
 #'   treatment period, as in \code{csdid}'s \code{gvar()}) can be used
 #'   instead. Never-treated units must have \code{NA}; a value of 0 is read as
 #'   \code{NA} (with a message) when all periods are positive.
-#' @param treat Character. Name of the binary treatment indicator column
-#'   (0, 1 or \code{NA}; default: \code{NULL}). Treatment onsets are
-#'   defined as switches from 0 to 1 between two consecutive periods, so that
-#'   \code{treat} can be either a status (1 as long as the unit is treated) or
-#'   a one-period event indicator. Optional when \code{last_treat} is
-#'   supplied: it is then only used for consistency checks and, if
-#'   \code{absorbing = FALSE}, to exclude periods of ongoing treatment (see
-#'   Details).
 #' @param absorbing Logical. If \code{TRUE} (default), treatment is assumed
 #'   absorbing (once treated, always treated): only the first onset of each
 #'   unit is used. If \code{FALSE}, units can be treated several times.
@@ -54,7 +57,8 @@
 #'   creates one column per horizon; \code{"long"} stacks all horizons into a
 #'   single \code{horizon} column.
 #' @param keep_filled Logical. If \code{TRUE} (default), periods missing
-#'   between the first and last appearance of a unit are added, and the added
+#'   between the first appearance of a unit and the last period of the panel
+#'   are added, and the added
 #'   rows are kept as reference rows when at least one lag of the dependent
 #'   variable (\code{<dependent>_tm1}, \code{<dependent>_tm2}, ...) is
 #'   observed. This allows a unit observed at \emph{t-1} and \emph{t+h} but
@@ -106,8 +110,10 @@
 #' observations. Onsets are counted from their start; the time since the end of
 #' a treatment is not used.
 #'
-#' \strong{Missing periods.} Periods missing between the first and last
-#' appearance of a unit are added before computing leads and lags. Columns
+#' \strong{Missing periods.} Periods missing between the first appearance of
+#' a unit and the last period of the panel are added before computing leads
+#' and lags (a period after the last appearance can still serve as the
+#' reference row of a pre-treatment horizon). Columns
 #' that are constant over the observed rows of a unit (e.g. time-invariant
 #' controls, fixed effects, clusters or weights) are copied to the added rows
 #' of that unit; other columns are left \code{NA}.
@@ -152,6 +158,17 @@
 #' print(ncol(df_wide))
 #' print(format(object.size(df_wide),units="Mb"))
 #'
+#' # Same, with treatment onsets given by the cohort variable (recommended,
+#' # robust to missing periods; 0 = never treated is read as NA)
+#' suppressWarnings({df_wide2 <- lpdidcsa_data(
+#'   data        = mpdta_r,
+#'   unit        = "countyreal",
+#'   time        = "year",
+#'   dependent   = "lemp",
+#'   last_treat  = "first.treat",
+#'   p_variables = p_variables
+#' )})
+#'
 #' # Long format: one row per unit x reference-period x horizon
 #' suppressWarnings({df_long <- lpdidcsa_data(
 #'   data         = mpdta_r,
@@ -175,10 +192,10 @@
 #' @export
 lpdidcsa_data <- function(data,
                           time        = "year",
-                          last_treat  = NULL,
                           treat       = NULL,
                           unit        = NULL,
                           dependent   = NULL,
+                          last_treat  = NULL,
                           n_pre       = NULL,
                           n_post      = NULL,
                           absorbing   = TRUE,
@@ -208,12 +225,10 @@ lpdidcsa_data <- function(data,
     stop("'p_variables' must be a named list with names such as 't0', 't1', 'tm1', 'tm2'.")
   }
 
-  # With last_treat, the treat column is optional
-  if (!is.null(last_treat) && !is.null(treat) && !(treat %in% names(data))) {
-    treat <- NULL
-  }
   if (is.null(last_treat) && is.null(treat)) {
-    stop("Either 'treat' or 'last_treat' must be supplied.")
+    stop("Supply 'last_treat' (recommended: period of the most recent ",
+         "treatment onset, or the cohort variable, i.e. first treatment ",
+         "period, if absorbing = TRUE) or 'treat' (0/1 treatment indicator).")
   }
 
   required_cols <- c(unit, time, dependent, treat, last_treat,
@@ -286,6 +301,19 @@ lpdidcsa_data <- function(data,
 
   generated <- intersect(c("first.treat", "last.treat", "next.treat", "dtreat"),
                          names(df))
+  # Inputs named like a generated column (e.g. last_treat = "first.treat")
+  # are read from an internal copy, dropped before returning
+  internal <- character(0)
+  if (!is.null(col_ltr) && col_ltr %in% generated) {
+    df[, .last_treat_input := get(col_ltr)]
+    col_ltr  <- ".last_treat_input"
+    internal <- c(internal, col_ltr)
+  }
+  if (!is.null(col_trt) && col_trt %in% generated) {
+    df[, .treat_input := get(col_trt)]
+    col_trt  <- ".treat_input"
+    internal <- c(internal, col_trt)
+  }
   if (length(generated) > 0) {
     warning("Existing column(s) overwritten: ", paste(generated, collapse = ", "))
     df[, (generated) := NULL]
@@ -388,21 +416,27 @@ lpdidcsa_data <- function(data,
   if (nrow(ev) == 0) stop("No treatment onset found in the data.")
 
   # ── 2. Completing for missing years ───────────────────────────────────────
-  sdtime <- df[, sum(dtime, na.rm = TRUE)]
+  # Periods are added between the first appearance of each unit and the last
+  # period of the panel: a row after the last appearance can still be the
+  # reference row of a pre-treatment horizon (y(t+h) - y(t-1), h <= -2, only
+  # uses earlier periods). Periods before the first appearance are useless
+  # (no observed t-1) and are not added.
+  t_max <- max(df[[col_time]])
+  df[, incomplete := (sum(dtime, na.rm = TRUE) > 0 |
+                        max(get(col_time)) < t_max) * 1, by = c(col_unit)]
 
-  if (sdtime > 0) {
+  if (df[, any(incomplete == 1)]) {
 
     message("Some units have incomplete time periods.")
 
-    df[, incomplete := (sum(dtime, na.rm = TRUE) > 0) * 1, by = c(col_unit)]
-
     print(df[, .N, by = incomplete])
 
-    message("Missing intermediary time periods were added.")
+    message("Missing time periods were added (between the first appearance ",
+            "of each unit and the last period of the panel).")
 
-    # All unit x time combinations between first and last appearance
+    # All unit x time combinations from first appearance to the panel's end
     df_in   <- df[incomplete == 1]
-    df_comp <- df_in[, .(tt = seq(min(get(col_time)), max(get(col_time)))),
+    df_comp <- df_in[, .(tt = seq(min(get(col_time)), t_max)),
                      by = c(col_unit)]
     setnames(df_comp, c(col_unit, col_time))
     df_in2  <- merge(df_comp, df_in, by = c(col_unit, col_time), all.x = TRUE)
@@ -428,8 +462,8 @@ lpdidcsa_data <- function(data,
     setorderv(df, c(col_unit, col_time))
 
     rm(df_in, df_comp, df_in2)
-    df[, incomplete := NULL]
   }
+  df[, incomplete := NULL]
 
   df[, dtime := NULL]
 
@@ -528,6 +562,7 @@ lpdidcsa_data <- function(data,
       message(n_added, " added row(s) kept as reference rows (observed lag of '",
               col_dep, "').")
     df[, rownumber := NULL]
+    if (length(internal) > 0) df[, (internal) := NULL]
 
     return(df[])
 
@@ -578,6 +613,7 @@ lpdidcsa_data <- function(data,
 
     df_l <- df_l[order(horizon, get(col_unit), get(col_time))]
     df_l[, rownumber := NULL]
+    if (length(internal) > 0) df_l[, (internal) := NULL]
 
     return(df_l[])
   }
