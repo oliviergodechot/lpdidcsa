@@ -7,7 +7,8 @@
 lpdidcsa_data(
   data,
   time = "year",
-  treat = "treat",
+  last_treat = NULL,
+  treat = NULL,
   unit = NULL,
   dependent = NULL,
   n_pre = NULL,
@@ -15,16 +16,35 @@ lpdidcsa_data(
   absorbing = TRUE,
   p_variables = list(),
   h_variables = NULL,
-  type_horizon = "wide"
+  type_horizon = "wide",
+  keep_filled = TRUE
 )
 }
 \arguments{
 \item{data}{A \code{data.frame} or \code{data.table}.}
 
-\item{time}{Character. Name of the time period column (default: \code{"year"}).}
+\item{time}{Character. Name of the time period column (default:
+\code{"year"}). Must be on a regular grid with unit step (e.g. years).}
+
+\item{last_treat}{Character or \code{NULL} (default). Name of a column
+giving the period of the most recent treatment onset known at \emph{t}
+(\code{NA} if the unit has not been treated yet), e.g. the birth year of
+the last child. Must be expressed on the same grid as \code{time}.
+Because onset dates are read from every observed row, an onset is
+recorded even if the unit is not observed in the onset period. When
+\code{absorbing = TRUE}, a time-invariant cohort variable (first
+treatment period, as in \code{csdid}'s \code{gvar()}) can be used
+instead. Never-treated units must have \code{NA}; a value of 0 is read as
+\code{NA} (with a message) when all periods are positive.}
 
 \item{treat}{Character. Name of the binary treatment indicator column
-(must contain only 0 and 1; default: \code{"treat"}).}
+(0, 1 or \code{NA}; default: \code{NULL}). Treatment onsets are
+defined as switches from 0 to 1 between two consecutive periods, so that
+\code{treat} can be either a status (1 as long as the unit is treated) or
+a one-period event indicator. Optional when \code{last_treat} is
+supplied: it is then only used for consistency checks and, if
+\code{absorbing = FALSE}, to exclude periods of ongoing treatment (see
+Details).}
 
 \item{unit}{Character. Name of the unit identifier column.}
 
@@ -39,14 +59,17 @@ include. Defaults to all available post-periods if \code{NULL} or
 non-integer. Capped at the maximum available in the data.}
 
 \item{absorbing}{Logical. If \code{TRUE} (default), treatment is assumed
-absorbing (once treated, always treated). If \code{FALSE}, treatment can
-switch on and off across periods.}
+absorbing (once treated, always treated): only the first onset of each
+unit is used. If \code{FALSE}, units can be treated several times.}
 
 \item{p_variables}{Named list of character vectors specifying
 horizon-specific control variables. List names follow the convention
 \code{"t0"}, \code{"t1"}, \code{"tm1"}, \code{"tm2"}, etc., where
 \code{"tm"} stands for \emph{t minus}. Use an empty list (default:
-\code{list()}) when no horizon-specific controls are needed.}
+\code{list()}) when no horizon-specific controls are needed. With
+\code{type_horizon = "long"} and \code{anticipation = a > 0} in
+\code{lpdidcsa()}, the reference outcome must be created here, e.g.
+\code{p_variables = list(tm2 = "lemp")} for \code{a = 1}.}
 
 \item{h_variables}{Character vector of column names to be carried through at
 every horizon (e.g. time-varying controls). Use \code{NULL} (default) if
@@ -55,18 +78,34 @@ not needed.}
 \item{type_horizon}{Character. Output structure: \code{"wide"} (default)
 creates one column per horizon; \code{"long"} stacks all horizons into a
 single \code{horizon} column.}
+
+\item{keep_filled}{Logical. If \code{TRUE} (default), periods missing
+between the first and last appearance of a unit are added, and the added
+rows are kept as reference rows when at least one lag of the dependent
+variable (\code{<dependent>_tm1}, \code{<dependent>_tm2}, ...) is
+observed. This allows a unit observed at \emph{t-1} and \emph{t+h} but
+not at \emph{t} to contribute to horizon \emph{h} (as in the
+pair-balanced samples of Stata's \code{csdid}). If \code{FALSE}, added
+rows are only used to compute leads and lags and are dropped from the
+output (behaviour of earlier versions).}
 }
 \value{
 A \code{data.table} with the original columns plus:
 \describe{
-\item{\code{first.treat}}{First treatment period per unit (\code{NA}
-for never-treated). Only present when \code{absorbing = TRUE}.}
-\item{\code{last.treat}}{Most recent treatment period as of \emph{t}
-(\code{NA} if never treated yet). Only present when \code{absorbing = FALSE}.}
-\item{\code{next.treat}}{Next upcoming treatment period (\code{NA} if
-no future treatment). Only present when \code{absorbing = FALSE}.}
-\item{\code{dtreat}}{Change in treatment status:
-\eqn{D_{it} - D_{i,t-1}}.}
+\item{\code{first.treat}}{First treatment onset per unit (\code{NA}
+for never-treated units). For an onset hidden in a gap of
+observation (treatment coded from \code{treat} only), the earliest
+possible onset.}
+\item{\code{last.treat}}{Most recent treatment onset strictly before
+\emph{t} (\code{NA} if none). For an onset hidden in a gap, the
+latest possible onset.}
+\item{\code{next.treat}}{Next treatment onset strictly after \emph{t}
+(\code{NA} if none). For an onset hidden in a gap, the earliest
+possible onset.}
+\item{\code{dtreat}}{1 if a treatment onset occurs at \emph{t}, 0
+otherwise, and \code{NA} if this cannot be determined (onset hidden
+in a gap, first period of a unit already treated, or ongoing
+treatment when \code{absorbing = FALSE}).}
 \item{Horizon columns}{For \code{type_horizon = "wide"}: outcome and
 control columns at each horizon, e.g. \code{lemp_tm2}, \code{lemp_t0}.
 Horizon \emph{-1} is always omitted (reference period).}
@@ -80,12 +119,38 @@ dependent variable and treatment indicator, suitable for Local Projections
 Difference-in-Differences (LP-DiD) estimation following Dube et al. (2023)
 and Callaway & Sant'Anna (2021) style heterogeneity-robust event studies.
 }
+\details{
+\strong{Treatment onsets.} With \code{treat} only, an onset at \emph{t}
+requires \code{treat} = 0 at \emph{t-1} and 1 at \emph{t}. When the unit is
+not observed (or \code{treat} is \code{NA}) between a period with
+\code{treat} = 0 and a later period with \code{treat} = 1, the onset date is
+only known to lie in that interval: \code{dtreat} is set to \code{NA} on
+the whole interval, \code{first.treat} and \code{next.treat} use its lower
+bound and \code{last.treat} its upper bound, so that such units never enter
+the control group by mistake. With \code{absorbing = FALSE}, the same
+applies to a gap between two periods with \code{treat} = 1 (a new onset may
+have occurred), and a one-period event occurring during a gap cannot be
+detected at all; a warning reports the number of units concerned.
+Supplying \code{last_treat} removes these ambiguities.
+
+With \code{absorbing = FALSE} and \code{treat} available, periods where
+\code{treat} = 1 without an onset (ongoing treatment status) get
+\code{dtreat = NA}, so that they are used neither as treated nor as control
+observations. Onsets are counted from their start; the time since the end of
+a treatment is not used.
+
+\strong{Missing periods.} Periods missing between the first and last
+appearance of a unit are added before computing leads and lags. Columns
+that are constant over the observed rows of a unit (e.g. time-invariant
+controls, fixed effects, clusters or weights) are copied to the added rows
+of that unit; other columns are left \code{NA}.
+}
 \examples{
 \donttest{
 data(mpdta_r, package = "lpdidcsa")
 
 # Initial mpdta_r characteristics
-print(colnames(mpdta_r)) 
+print(colnames(mpdta_r))
 print(nrow(mpdta_r))
 print(ncol(mpdta_r))
 print(format(object.size(mpdta_r),units="Mb"))
@@ -120,7 +185,7 @@ suppressWarnings({df_long <- lpdidcsa_data(
   treat        = "treat",
   absorbing    = TRUE,
   p_variables  = p_variables,
-  type_horizon = "long"   
+  type_horizon = "long"
 )})
 
 

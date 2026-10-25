@@ -12,14 +12,6 @@
 #' @param time Character. Name of the time period column (default:
 #'   \code{"year"}). Must be on a regular grid with unit step (e.g. years).
 #' @param dependent Character. Name of the dependent variable column.
-#' @param treat Character. Name of the binary treatment indicator column
-#'   (0, 1 or \code{NA}; default: \code{"treat"}). Treatment onsets are
-#'   defined as switches from 0 to 1 between two consecutive periods, so that
-#'   \code{treat} can be either a status (1 as long as the unit is treated) or
-#'   a one-period event indicator. Optional when \code{last_treat} is
-#'   supplied: it is then only used for consistency checks and, if
-#'   \code{absorbing = FALSE}, to exclude periods of ongoing treatment (see
-#'   Details).
 #' @param last_treat Character or \code{NULL} (default). Name of a column
 #'   giving the period of the most recent treatment onset known at \emph{t}
 #'   (\code{NA} if the unit has not been treated yet), e.g. the birth year of
@@ -30,6 +22,14 @@
 #'   treatment period, as in \code{csdid}'s \code{gvar()}) can be used
 #'   instead. Never-treated units must have \code{NA}; a value of 0 is read as
 #'   \code{NA} (with a message) when all periods are positive.
+#' @param treat Character. Name of the binary treatment indicator column
+#'   (0, 1 or \code{NA}; default: \code{NULL}). Treatment onsets are
+#'   defined as switches from 0 to 1 between two consecutive periods, so that
+#'   \code{treat} can be either a status (1 as long as the unit is treated) or
+#'   a one-period event indicator. Optional when \code{last_treat} is
+#'   supplied: it is then only used for consistency checks and, if
+#'   \code{absorbing = FALSE}, to exclude periods of ongoing treatment (see
+#'   Details).
 #' @param absorbing Logical. If \code{TRUE} (default), treatment is assumed
 #'   absorbing (once treated, always treated): only the first onset of each
 #'   unit is used. If \code{FALSE}, units can be treated several times.
@@ -175,10 +175,10 @@
 #' @export
 lpdidcsa_data <- function(data,
                           time        = "year",
-                          treat       = "treat",
+                          last_treat  = NULL,
+                          treat       = NULL,
                           unit        = NULL,
                           dependent   = NULL,
-                          last_treat  = NULL,
                           n_pre       = NULL,
                           n_post      = NULL,
                           absorbing   = TRUE,

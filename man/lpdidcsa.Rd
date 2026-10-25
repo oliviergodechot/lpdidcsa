@@ -126,13 +126,13 @@ and no longer supported for \code{meth = "lpdid_adj"} (see Details).}
 \item{se_correction}{Logical. If \code{TRUE} (default) and
 \code{meth \%in\% c("lpdid_adj","lpdid_dr")}, computes a corrected
 standard error (\code{se_correct} column) via a cluster-level combined
-influence function, in addition to the naive standard error
+influence function, in addition to the uncorrected standard error
 (\code{se} column). The correction propagates the estimation
 uncertainty of the first-stage nuisance model(s) (outcome regression
 for RA; outcome regression and propensity score for DR) into the final
 ATT's standard error, and has been validated to reproduce
 \code{lpdid.ado}'s \code{listreg}-based RA standard error exactly on a
-test panel. If \code{FALSE}, only the naive standard error is computed,
+test panel. If \code{FALSE}, only the uncorrected standard error is computed,
 which is faster on large datasets since it skips the additional
 \code{sandwich::estfun()}/\code{bread()} calls (no extra model refits
 are involved either way). Ignored for all other methods.}
@@ -214,19 +214,21 @@ are in \code{or} and \code{ps}.}
 \code{"lpdid_dr"} only.}
 \item{\code{plot}}{A \code{ggplot2} event study plot with 95\\%
 confidence intervals, built from \code{se_correct} where it has
-been computed and from the naive \code{se} otherwise.}
+been computed and from the uncorrected \code{se} otherwise.}
 \item{\code{pred}}{If \code{prediction = TRUE}, a \code{data.table}
 with one row per horizon and group (\code{dtreat} = 1: treated;
 0: treated without treatment, i.e. the control counterfactual):
 \code{estimate}/\code{se} (predicted change since the reference
-period), \code{level_common}/\code{se_common} (level on the common
-treated anchor; \code{se_common} treats the anchor as fixed and so
-equals \code{se}) and \code{level_group}/\code{se_group} (level on the
-group-specific anchors). The reference period is included with a
-change of 0. Standard-error columns are \code{NA} unless
-\code{prediction_se = TRUE}. \code{NULL} otherwise.}
-\item{\code{pred_anchor}}{If \code{prediction = TRUE}, the two anchors
-(baseline levels) and their standard errors. \code{NULL} otherwise.}
+period), \code{level_common} (level on the common treated anchor)
+and \code{level_group} (level on the group-specific anchors). The
+reference period is included with a change of 0. \code{se} is
+\code{NA} unless \code{prediction_se = TRUE}; it also applies to the
+levels, the anchors being held fixed. \code{NULL} otherwise.}
+\item{\code{pred_anchor}}{If \code{prediction = TRUE}, a one-row
+\code{data.table} with the treated and control anchors (baseline
+levels), the baseline gap (treated - control), its standard error
+(if \code{prediction_se = TRUE}) and the adjustment used.
+\code{NULL} otherwise.}
 \item{\code{pred_plot}}{If \code{prediction = TRUE}, a list of three
 \code{ggplot2} figures: \code{change} (no anchor), \code{common}
 (common anchor) and \code{group} (group-specific anchors).
@@ -266,11 +268,7 @@ regression (fit on untreated observations) plus a cluster-level combined
 influence function for its standard error, replacing the previous
 \code{marginaleffects::avg_comparisons()}-based implementation. This
 correctly accounts for the cross-cluster covariance between the
-control-fitting stage and the treated-outcome stage, which a naive
-additive \code{V_naive + V_extra} formula would omit whenever the same
-cluster (e.g. the same unit) contributes both a clean-control observation
-and its own treated observation within a horizon's estimation sample --
-the typical case in a staggered-adoption panel. \code{one_reg = TRUE} is
+control-fitting stage and the treated-outcome stage. \code{one_reg = TRUE} is
 no longer supported for \code{"lpdid_adj"}, since the corresponding
 influence-function derivation for the stacked one-regression case has not
 been validated; use \code{one_reg = FALSE}.
@@ -298,7 +296,7 @@ affect the estimate), where \eqn{q_t} is the \eqn{b}-weighted share of
 treated observations in period \eqn{t} and \eqn{b_i} is the survey weight
 (\code{"lpdid_rw"}) or the survey weight times the ATT-IPW weight
 (1 for treated, \eqn{\hat p/(1-\hat p)} for controls; \code{"lpdid_ipw"}).
-The naive \code{se} treats \eqn{w_i} as known. With
+The uncorrected \code{se} treats \eqn{w_i} as known. With
 \code{se_correction_rw_ipw = TRUE}, \code{se_correct} adds to each
 observation's WLS score \eqn{s_i} the first-order effect of estimating
 the nuisance parameters: \eqn{G_t\, b_j (D_j - q_t)/\sum_{t} b} with
@@ -332,16 +330,37 @@ orthogonal to the treatment dummy. These are therefore predictions for the
 treated, with and without treatment.
 
 Two anchors (levels at the reference period) are computed once, on the
-\eqn{h = 0} clean sample: the treated anchor is the weighted mean of the
-reference-period outcome among treated observations; the control anchor
-is the weighted mean of the same variable among controls, period by
-period, averaged with the treated observations' period shares (i.e.
-adjusted to the treated's period mix, but not for covariates). Periods
-with treated observations but no control are dropped from this average,
-with a warning. The common-anchor figure adds the treated anchor to both
-curves, so that the gap is the ATT; the group-anchor figure adds each
-group's own anchor, so that the gap is the period-adjusted baseline
-difference plus the ATT.
+\eqn{h = 0} clean sample, with the same weights, controls and fixed
+effects as the estimator at \eqn{h = 0}. The treated anchor is the weighted
+mean of the reference-period outcome among treated observations. The
+control anchor is the treated anchor minus the baseline gap, obtained by
+applying the method's own adjustment to the reference-period level instead
+of the change, so that it is the predicted baseline level of the controls
+for the treated's periods and covariates:
+\itemize{
+\item \code{"lpdid"}, \code{"lpdid_rw"}, \code{"lpcsa"},
+\code{"lpdid_adj"}: regression adjustment, i.e. an outcome regression
+of the baseline level on period dummies and controls (and \code{FE}),
+fitted on the controls and predicted for the treated;
+\item \code{"lpdid_ipw"}, \code{"lpcsa_ipw"}: inverse probability
+weighting, i.e. the method's propensity score, trimming and period
+reweighting (odds-weighted control means within period, averaged with
+the treated's period shares);
+\item \code{"lpdid_dr"}: the doubly robust (AIPW) score on the level.
+}
+Without covariates, all methods give the same control anchor: the control
+mean of each period, averaged with the treated's period shares. If the
+reference-period outcome itself is a covariate, the regression-adjustment
+and doubly robust anchors coincide by construction (gap 0, with a
+message); the IPW gap then measures the residual imbalance of the
+propensity score on that variable. Treated
+observations without prediction (period or fixed effect absent among
+controls) are dropped from the anchors, with a warning. The common-anchor
+figure adds the treated anchor to both curves, so that the gap between
+them is the ATT; the group-anchor figure adds each group's own anchor, so
+that the gap is the adjusted baseline gap plus the ATT. These figures
+illustrate what the estimator does; inference on the effects relies on
+\code{est}.
 
 With \code{prediction_se = TRUE}, standard errors are computed from
 cluster-level influence functions (first element of \code{clusters}, or
@@ -353,17 +372,19 @@ keeps their covariance. \eqn{\mathrm{IF}(ATT)} is the corrected one used for
 even with \code{se_correction = FALSE}; \code{"lpdid_rw"} and
 \code{"lpdid_ipw"} only with \code{se_correction_rw_ipw = TRUE}) and the
 regression-score one otherwise; for the CSA methods the aggregation
-weights are treated as fixed, as in \code{fixest::aggregate()}. Level
-standard errors add the anchor's influence function, clusters being matched
-across the two samples, so the anchor's sampling uncertainty and its
-covariance with the predicted changes are included. This applies to the
-group-anchor levels only: in the common-anchor figure the anchor is the
-same constant for both curves, so its uncertainty shifts them jointly and
-says nothing about their comparison; it is treated as fixed there
-(\code{se_common} = \code{se}), and reported in \code{pred_anchor}. All prediction
-standard errors use the \eqn{G/(G-1)} small-sample factor; they can thus
-differ slightly from the ATT standard errors in \code{est}, which follow
-each method's own convention. Under heterogeneous effects, the
+weights are treated as fixed, as in \code{fixest::aggregate()}. In the
+level figures, the coloured bars are those of the changes, the anchors
+being held fixed: an anchor's sampling uncertainty shifts a whole curve
+and says little about the comparison over time. The uncertainty of the
+baseline gap is shown once, as a black bar on the control point at the
+reference period of the group-anchor figure; its standard error comes from
+the influence function of the adjustment, including the first stage
+(outcome regression and/or propensity score; trimming treated as fixed,
+same absorbed-\code{FE} caveat as above). All prediction standard errors
+use the \eqn{G/(G-1)} small-sample factor; they can thus differ slightly
+from the ATT standard errors in \code{est}, which follow each method's own
+convention. Overlapping bars are not a test of the gap between curves,
+whose standard error is that of the ATT. Under heterogeneous effects, the
 counterfactual curve inherits the estimand of each method (e.g.
 variance-weighted for \code{"lpdid"}).
 }
@@ -426,7 +447,7 @@ print(res$ps)
 #    with the corrected standard error
 res <- lpdidcsa(df, unit = "countyreal", time = "year",
                 dependent = "lemp", meth = "lpdid_adj", controls = "lpop")
-print(res$est)   # includes both se (naive) and se_correct
+print(res$est)   # includes both se (uncorrected) and se_correct
 print(res$or)    # first-step outcome regression on the control group
 
 # 6. Same, but skipping the SE correction for speed on large data
