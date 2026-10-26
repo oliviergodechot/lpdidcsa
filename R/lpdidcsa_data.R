@@ -192,10 +192,10 @@
 #' @export
 lpdidcsa_data <- function(data,
                           time        = "year",
+                          last_treat  = NULL,                          
                           treat       = NULL,
                           unit        = NULL,
                           dependent   = NULL,
-                          last_treat  = NULL,
                           n_pre       = NULL,
                           n_post      = NULL,
                           absorbing   = TRUE,

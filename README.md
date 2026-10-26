@@ -41,6 +41,14 @@ In this [methodological note](docs/LPDiD_methodological_note.pdf), we clarify th
 -   Predicted outcome paths of the treated with and without treatment, with covariate-adjusted anchors, three figures and optional confidence intervals (`prediction`, `prediction_se`).
 -   New output element `or` (first-stage outcome regressions).
 
+### Treatment timing and missing periods in `lpdidcsa_data()`
+
+-   New argument `last_treat`: period of the most recent treatment onset known at *t* (or, with an absorbing treatment, the cohort variable, as `gvar()` in `csdid`). Onsets are recorded even when the unit is not observed in the onset period. `treat` now defaults to `NULL`: at least one of `treat` and `last_treat` must be supplied, and `last_treat` is recommended.
+-   With `treat` only, onsets are defined as switches from 0 to 1 between two consecutive periods, so `treat` can be a status or a one-period event indicator. Onsets hidden in a gap of observation are flagged (`dtreat = NA`) and reported in a warning, and such units never enter the control group by mistake.
+-   `first.treat`, `last.treat` and `next.treat` are now always created, for absorbing and non-absorbing treatments.
+-   New argument `keep_filled` (default `TRUE`): missing periods are added from the first appearance of each unit to the last period of the panel, and the added rows are kept as reference rows when a lag of the outcome is observed. A unit observed at *t−1* and *t+h* but not at *t* then contributes to horizon *h*, as in the pair-balanced samples of Stata's `csdid`. Results are the same whether missing observations are coded as missing rows or as missing outcomes. `keep_filled = FALSE` gives the results of earlier versions.
+-   With `absorbing = FALSE`, periods of ongoing treatment (`treat = 1` without an onset) are excluded, and `reentry` is counted from the onset of the last treatment.
+
 ------------------------------------------------------------------------
 
 ## Installation
@@ -81,13 +89,17 @@ Prepares the panel by computing treatment timing variables and creating leads/la
 | `unit` | `character` | — | Unit identifier variable |
 | `time` | `character` | `"year"` | Time period variable (integer-valued) |
 | `dependent` | `character` | — | Outcome variable |
-| `treat` | `character` | `"treat"` | Binary treatment indicator (0/1) |
-| `absorbing` | `logical` | `TRUE` | Whether treatment is absorbing |
+| `treat` | `character` / `NULL` | `NULL` | Binary treatment indicator (0, 1 or `NA`): a status or a one-period event indicator. Onsets are 0 → 1 switches |
+| `last_treat` | `character` / `NULL` | `NULL` | Period of the most recent treatment onset known at *t* (`NA` if none yet; `0` is read as never treated). With `absorbing = TRUE`, a time-invariant cohort variable (first treatment period) can be used. Recommended over `treat` |
+| `absorbing` | `logical` | `TRUE` | Whether treatment is absorbing (only the first onset is used) |
 | `n_pre` | `integer` / `NULL` | `NULL` | Pre-treatment periods (all if `NULL`) |
 | `n_post` | `integer` / `NULL` | `NULL` | Post-treatment periods (all if `NULL`) |
 | `p_variables` | named `list` | `list()` | Variables to measure at specific horizons |
 | `h_variables` | `character` / `NULL` | `NULL` | Variables carried at every horizon |
 | `type_horizon` | `character` | `"wide"` | `"wide"` or `"long"` output format |
+| `keep_filled` | `logical` | `TRUE` | Keep added (missing) periods as reference rows when a lag of the outcome is observed; `FALSE` drops them (earlier behaviour) |
+
+At least one of `treat` and `last_treat` must be supplied. With a treatment status and `absorbing = FALSE`, supply both: `last_treat` gives the onsets, `treat` identifies periods of ongoing treatment.
 
 ### `p_variables` naming convention
 
@@ -105,17 +117,23 @@ p_variables <- list(
 
 | Column | Description |
 |------------------------------------|------------------------------------|
-| `first.treat` | First treatment period per unit (`NA` for never-treated). Absorbing only. |
-| `last.treat` | Most recent treatment period as of *t*. Non-absorbing only. |
-| `next.treat` | Next upcoming treatment period. Non-absorbing only. |
-| `dtreat` | Treatment switch: 1 if *D_it − D_i,t−1 = 1*, 0 otherwise |
+| `first.treat` | First treatment onset per unit (`NA` for never-treated) |
+| `last.treat` | Most recent treatment onset strictly before *t* (`NA` if none) |
+| `next.treat` | Next treatment onset strictly after *t* (`NA` if none) |
+| `dtreat` | 1 if a treatment onset occurs at *t*, 0 otherwise, `NA` if this cannot be determined (onset hidden in a gap, first period of a unit already treated, ongoing treatment when `absorbing = FALSE`) |
 | `<dep>_tm1` | Outcome at the reference period *t−1* (both formats) |
 | `<dep>_tm2`, `<dep>_t0`, … | Outcome at each horizon (wide format) |
 | `<var>_tm2`, `<var>_t1`, … | `p_variables` at their horizons, `h_variables` at every horizon (wide format) |
 | `<dep>_th`, `<var>_th` | Outcome and `h_variables` at the horizon of the row (long format) |
 | `horizon` | Horizon integer *h = t′ − t* (long format) |
 
-Horizon −1 is the reference period and is never computed as a horizon. If some units have gaps in their time series, the missing intermediate periods are added (with a message) so that leads and lags refer to calendar time; duplicated unit × period observations stop the function.
+Horizon −1 is the reference period and is never computed as a horizon. Duplicated unit × period observations stop the function.
+
+### Missing periods and treatment onsets
+
+Missing periods are added (with a message) from the first appearance of each unit to the last period of the panel, so that leads and lags refer to calendar time. Periods after a unit's last appearance can still be reference rows for pre-treatment horizons, which only use earlier periods. Columns that are constant over the observed rows of a unit (time-invariant controls, fixed effects, clusters, weights) are copied to its added rows; other columns are left `NA`. With `keep_filled = TRUE`, added rows with at least one observed lag of the outcome are kept, so that results do not depend on whether missing observations are coded as missing rows or as missing outcomes. Time-varying covariates measured at *t* are `NA` on added rows, which are then dropped by the regressions; use reference-period covariates (e.g. `p_variables = list(tm1 = "x")`) to keep them.
+
+With `treat` only, an onset whose date falls in a gap of observation (0 before the gap, 1 after) cannot be dated: `dtreat` is set to `NA` over the gap, `first.treat` and `next.treat` use the earliest possible onset and `last.treat` the latest, so that the unit never serves as a control by mistake. With `absorbing = FALSE`, a one-period event occurring during a gap cannot be detected at all. Both cases are reported in a warning. `last_treat` removes these ambiguities, as onset dates are read from every observed row.
 
 ### Example
 
@@ -136,6 +154,17 @@ df_wide <- lpdidcsa_data(
   dependent   = "lemp",
   treat       = "treat",
   absorbing   = TRUE,
+  p_variables = p_variables
+)
+
+# Same, with onsets given by the cohort variable (recommended:
+# robust to missing periods; first.treat = 0 is read as never treated)
+df_wide2 <- lpdidcsa_data(
+  data        = mpdta_r,
+  unit        = "countyreal",
+  time        = "year",
+  dependent   = "lemp",
+  last_treat  = "first.treat",
   p_variables = p_variables
 )
 
@@ -363,6 +392,7 @@ res$ps     # coefficient table for the first stage propensity score
 ## Notes
 
 -   `n_pre` and `n_post` are capped at the maximum lags/leads available in the data in both functions.
+-   With `type_horizon = "long"` and `anticipation = a > 0`, the reference outcome must be created in `lpdidcsa_data()` through `p_variables`, e.g. `p_variables = list(tm2 = "lemp")` for `a = 1`.
 -   `lpdid_adj` and `lpdid_dr` are only available with `one_reg = FALSE`; `prediction`, `time_x_controls` and `se_correction_rw_ipw` are ignored (with a warning) when `one_reg = TRUE`.
 -   With `time_x_controls = TRUE`, the generated formulas use base-R `factor()` terms instead of fixest's `i()`; the treatment coefficient is then named `dtreat` instead of `dtreat::1`, and controls written `i(var)` must not carry further arguments (use `factor(var)`).
 -   `se_correction = FALSE` skips the influence-function computations of `lpdid_adj` and `lpdid_dr`, which is faster on large datasets (they are still computed if `prediction_se = TRUE`).
