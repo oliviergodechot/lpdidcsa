@@ -544,7 +544,7 @@ write.csv(all,"bench_big.csv",row.names = F)
 
 
 ## Wide ----
-methods <- c("lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw","lpcsa_adj","lpcsa_dr")
+methods <- c("lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw","lpdid_adj","lpdid_dr")
 results <- list()
 for (method in methods) {
   cat("Benchmarking method:", method, "\n")
