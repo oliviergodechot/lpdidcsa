@@ -8,6 +8,7 @@ library(data.table)
 library(lpdidcsa)
 library(did)
 library(fixest)
+library("DIDmultiplegt")
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 
 
@@ -136,6 +137,7 @@ results_df <- rbindlist(results, idcol = "method")
 results_df$format <- "wide"
 results_df$one_reg <- FALSE
 results_df$se_correct <- FALSE
+results_df$interact <- F
 
 all <- rbind(all,results_df,fill=T)
 all
@@ -166,6 +168,7 @@ print(results_df_int[, .(method, median_time,  iterations)])
 results_df_int$format <- "wide"
 results_df_int$one_reg <- FALSE
 results_df_int$se_correct <- FALSE
+results_df_int$interact <- T
 
 all <- rbind(all,results_df_int,fill=T)
 all
@@ -192,6 +195,7 @@ results_df <- rbindlist(results, idcol = "method")
 results_df$format <- "wide"
 results_df$one_reg <- FALSE
 results_df$se_correct <- TRUE
+results_df$interact <- F
 
 all <- rbind(all,results_df,fill=T)
 all
@@ -221,6 +225,7 @@ print(results_df_int[, .(method, median_time,  iterations)])
 results_df_int$format <- "wide"
 results_df_int$one_reg <- FALSE
 results_df_int$se_correct <- TRUE
+results_df_int$interact <- T
 
 all <- rbind(all,results_df_int,fill=T)
 all
@@ -253,6 +258,7 @@ speed <- data.table(
   method = "csa ipw",
   format = NA,
   one_reg = NA,
+  interact= T,
   median_time = time_csa_ipw$median,  
   min_time = min(unlist(time_csa_ipw$time)),
   max_time = max(unlist(time_csa_ipw$time)),
@@ -286,6 +292,7 @@ speed <- data.table(
   method = "csa reg",
   format = NA,
   one_reg = NA,
+  interact= T,
   median_time = time_csa_reg$median,  
   min_time = min(unlist(time_csa_reg$time)),
   max_time = max(unlist(time_csa_reg$time)),
@@ -315,10 +322,12 @@ check = FALSE,
 memory = FALSE)    
 rm(csa_dr,csa_dr_det)
 
+
 speed <- data.table(
   method = "csa dr",
   format = NA,
   one_reg = NA,
+  interact= T,
   median_time = time_csa_dr$median,  
   min_time = min(unlist(time_csa_dr$time)),
   max_time = max(unlist(time_csa_dr$time)),
@@ -334,6 +343,8 @@ write.csv(all,"bench.csv",row.names = F)
 gc()
 
 rm(df)
+
+
 ## Long horizon database ---------------------
 result <- bench::mark({df_l  <- lpdidcsa_data(toydata, 
                                               unit = "id", 
@@ -491,7 +502,7 @@ all <- rbind(all,speed,fill=T)
 write.csv(all,"bench_big.csv",row.names = F)
 
 ## Wide no SE correction ----
-methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw","lpcsa_adj","lpcsa_dr")
+methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw","lpdid_adj","lpdid_dr")
 results <- list()
 for (method in methods) {
   cat("Benchmarking method:", method, "\n")
@@ -509,6 +520,7 @@ for (method in methods) {
 # Display results
 results_df <- rbindlist(results, idcol = "method")
 results_df$se_correct <- F
+results_df$interact <- F
 
 all <- rbind(all,results_df,fill=T)
 all
@@ -534,6 +546,7 @@ for (method in methods) {
 
 results_df_int <- rbindlist(results, idcol = "method")
 results_df_int$se_correct <- F
+results_df_int$interact <- T
 print(results_df_int[, .(method, median_time,  iterations)])
 
 all <- rbind(all,results_df_int,fill=T)
@@ -561,6 +574,7 @@ for (method in methods) {
 # Display results
 results_df <- rbindlist(results, idcol = "method")
 results_df$se_correct <- T
+results_df$interact <- F
 
 all <- rbind(all,results_df,fill=T)
 all
@@ -585,6 +599,7 @@ for (method in methods) {
 
 results_df_int <- rbindlist(results, idcol = "method")
 results_df_int$se_correct <- T
+results_df_int$interact <- T
 print(results_df_int[, .(method, median_time,  iterations)])
 
 all <- rbind(all,results_df_int,fill=T)
@@ -617,6 +632,7 @@ time_csa_ipw
 
 speed <- data.table(
   method = "csa ipw",
+  interact= T,
   median_time = time_csa_ipw$median,  
   min_time = min(unlist(time_csa_ipw$time)),
   max_time = max(unlist(time_csa_ipw$time)),
@@ -648,6 +664,7 @@ rm(csa_reg,csa_reg_det)
 
 speed <- data.table(
   method = "csa reg",
+  interact= T,
   median_time = time_csa_reg$median,  
   min_time = min(unlist(time_csa_reg$time)),
   max_time = max(unlist(time_csa_reg$time)),
@@ -682,6 +699,7 @@ speed <- data.table(
   method = "csa dr",
   format = NA,
   one_reg = NA,
+  interact= T,
   median_time = time_csa_dr$median,  
   min_time = min(unlist(time_csa_dr$time)),
   max_time = max(unlist(time_csa_dr$time)),
@@ -693,6 +711,8 @@ all
 write.csv(all,"bench_big.csv",row.names = F)
 
 gc()
+
+
 
 
 
