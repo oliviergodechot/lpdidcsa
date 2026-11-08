@@ -382,7 +382,7 @@ write.csv(all,"bench.csv",row.names = F)
 
 
 ## Long multiple regressions ----
-methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw","lpcsa_adj","lpcsa_dr")
+methods <- c("lpdid", "lpdid_rw", "lpdid_ipw", "lpcsa", "lpcsa_ipw","lpdid_adj","lpdid_dr")
 results <- list()
 for (method in methods) {
   cat("Benchmarking méthode:", method, "\n")
@@ -409,6 +409,8 @@ all
 
 write.csv(all,"bench.csv",row.names = F)
 gc()
+
+
 
 ## Long and 1 regressions ----
 n_it <- 5
@@ -438,6 +440,7 @@ all <- rbind(all,results_df_l1,fill=T)
 all
 
 write.csv(all,"bench.csv",row.names = F)
+
 
 
 # Large database ----
